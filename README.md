@@ -2,6 +2,8 @@
 
 A local-first productivity application for project management, documentation, and team collaboration. Named after the legendary ship Endurance.
 
+![Endur](public/Endur_Mockup.png)
+
 ## Features
 
 ### Project Management (Kanban)
