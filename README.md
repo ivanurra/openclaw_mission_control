@@ -2,7 +2,7 @@
 
 A local-first productivity application for project management, documentation, and team collaboration. Named after the legendary ship Endurance.
 
-![Endur_Mac](Endur_Mockup.png)
+![Screenshot](public/Endur_Mockup.png)
 
 ## Features
 
