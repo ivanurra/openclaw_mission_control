@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/cypress/screenshots
+/cypress/videos
+/.cypress-data
 
 # next.js
 /.next/
