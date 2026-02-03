@@ -23,7 +23,7 @@ export async function createDeveloper(input: CreateDeveloperInput): Promise<Deve
   const developer: Developer = {
     id: generateId(),
     name: input.name,
-    email: input.email,
+    description: input.description,
     role: input.role,
     color: input.color || DEVELOPER_COLORS[developers.length % DEVELOPER_COLORS.length],
     projectIds: [],

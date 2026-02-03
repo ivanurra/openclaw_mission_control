@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, FileText, Folder, ChevronRight, ChevronDown, Trash2, Pencil, Upload } from 'lucide-react';
-import { Button, Modal, Input, EmptyState } from '@/components/ui';
+import { Button, Modal, Input, EmptyState, Select, Badge } from '@/components/ui';
 import type { Document, Folder as FolderType, CreateDocumentInput, CreateFolderInput } from '@/types';
 import { cn } from '@/lib/utils/cn';
 import { formatDate } from '@/lib/utils/date';
@@ -19,7 +19,7 @@ export default function DocsPage() {
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [docForm, setDocForm] = useState<CreateDocumentInput>({ title: '', content: '' });
-  const [folderForm, setFolderForm] = useState<CreateFolderInput>({ name: '' });
+  const [folderForm, setFolderForm] = useState<CreateFolderInput>({ name: '', parentId: null });
 
   useEffect(() => {
     fetchData();
@@ -76,13 +76,13 @@ export default function DocsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...folderForm,
-          parentId: selectedFolderId,
+          parentId: folderForm.parentId ?? null,
         }),
       });
       const newFolder = await res.json();
       setFolders([...folders, newFolder]);
       setIsFolderModalOpen(false);
-      setFolderForm({ name: '' });
+      setFolderForm({ name: '', parentId: null });
     } catch (error) {
       console.error('Failed to create folder:', error);
     }
@@ -130,6 +130,13 @@ export default function DocsPage() {
     return documents.filter((d) => d.folderId === folderId);
   }
 
+  function buildFolderOptions(parentId: string | null, depth: number = 0): { value: string; label: string }[] {
+    return getChildFolders(parentId).flatMap((folder) => ([
+      { value: folder.id, label: `${'— '.repeat(depth)}${folder.name}` },
+      ...buildFolderOptions(folder.id, depth + 1),
+    ]));
+  }
+
   function renderFolderTree(parentId: string | null, level: number = 0): React.ReactNode {
     const childFolders = getChildFolders(parentId);
 
@@ -137,6 +144,7 @@ export default function DocsPage() {
       const isExpanded = expandedFolders.has(folder.id);
       const isSelected = selectedFolderId === folder.id;
       const hasChildren = getChildFolders(folder.id).length > 0 || getDocumentsInFolder(folder.id).length > 0;
+      const docCount = getDocumentsInFolder(folder.id).length;
 
       return (
         <div key={folder.id}>
@@ -159,6 +167,7 @@ export default function DocsPage() {
             </button>
             <Folder size={16} className="text-[var(--text-muted)]" />
             <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{folder.name}</span>
+            <Badge className="text-[10px]">{docCount}</Badge>
             <button
               onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
               className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)]"
@@ -212,7 +221,10 @@ export default function DocsPage() {
             variant="ghost"
             size="sm"
             className="w-full justify-start"
-            onClick={() => setIsFolderModalOpen(true)}
+            onClick={() => {
+              setFolderForm({ name: '', parentId: null });
+              setIsFolderModalOpen(true);
+            }}
           >
             <Plus size={16} />
             New Folder
@@ -322,6 +334,15 @@ export default function DocsPage() {
             value={folderForm.name}
             onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
             required
+          />
+          <Select
+            label="Location"
+            value={folderForm.parentId ?? 'root'}
+            onChange={(e) => setFolderForm({ ...folderForm, parentId: e.target.value === 'root' ? null : e.target.value })}
+            options={[
+              { value: 'root', label: 'Root' },
+              ...buildFolderOptions(null),
+            ]}
           />
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setIsFolderModalOpen(false)} className="flex-1">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Users, Trash2, Pencil } from 'lucide-react';
-import { Button, Modal, Input, EmptyState, Avatar } from '@/components/ui';
+import { Button, Modal, Input, Textarea, EmptyState, Avatar } from '@/components/ui';
 import type { Developer, CreateDeveloperInput } from '@/types';
 import { cn } from '@/lib/utils/cn';
 import { DEVELOPER_COLORS } from '@/lib/constants/kanban';
@@ -14,8 +14,8 @@ export default function PeoplePage() {
   const [editingDeveloper, setEditingDeveloper] = useState<Developer | null>(null);
   const [formData, setFormData] = useState<CreateDeveloperInput>({
     name: '',
-    email: '',
     role: '',
+    description: '',
     color: DEVELOPER_COLORS[0],
   });
 
@@ -78,8 +78,8 @@ export default function PeoplePage() {
     setEditingDeveloper(developer);
     setFormData({
       name: developer.name,
-      email: developer.email || '',
       role: developer.role || '',
+      description: developer.description || '',
       color: developer.color,
     });
     setIsModalOpen(true);
@@ -90,8 +90,8 @@ export default function PeoplePage() {
     setEditingDeveloper(null);
     setFormData({
       name: '',
-      email: '',
       role: '',
+      description: '',
       color: DEVELOPER_COLORS[developers.length % DEVELOPER_COLORS.length],
     });
   }
@@ -151,9 +151,9 @@ export default function PeoplePage() {
                       {developer.role}
                     </p>
                   )}
-                  {developer.email && (
-                    <p className="text-xs text-[var(--text-muted)] truncate mt-1">
-                      {developer.email}
+                  {developer.description && (
+                    <p className="text-xs text-[var(--text-muted)] line-clamp-2 mt-1">
+                      {developer.description}
                     </p>
                   )}
                 </div>
@@ -197,17 +197,16 @@ export default function PeoplePage() {
             required
           />
           <Input
-            label="Email"
-            type="email"
-            placeholder="email@example.com"
-            value={formData.email || ''}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          />
-          <Input
             label="Role"
             placeholder="Developer, Designer, PM..."
             value={formData.role || ''}
             onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+          />
+          <Textarea
+            label="Description"
+            placeholder="Frontend, backend, iOS, devops..."
+            value={formData.description || ''}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           />
           <div>
             <label className="text-sm font-medium text-[var(--text-secondary)] block mb-2">

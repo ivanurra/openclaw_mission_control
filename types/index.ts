@@ -49,7 +49,7 @@ export interface CreateTaskInput {
 export interface Developer {
   id: string;
   name: string;
-  email?: string;
+  description?: string;
   avatar?: string;
   color: string;
   role?: string;
@@ -59,7 +59,7 @@ export interface Developer {
 
 export interface CreateDeveloperInput {
   name: string;
-  email?: string;
+  description?: string;
   role?: string;
   color?: string;
 }

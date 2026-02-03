@@ -2,7 +2,9 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 
-export const DATA_DIR = path.join(process.cwd(), 'data');
+export const DATA_DIR = process.env.ENDUR_DATA_DIR
+  ? path.resolve(process.env.ENDUR_DATA_DIR)
+  : path.join(process.cwd(), 'data');
 
 export async function ensureDir(dirPath: string): Promise<void> {
   try {
@@ -51,8 +53,33 @@ export async function writeMarkdownFile<T extends object>(
   content: string
 ): Promise<void> {
   await ensureDir(path.dirname(filePath));
-  const output = matter.stringify(content, frontmatter);
+  const sanitizedFrontmatter = sanitizeFrontmatter(frontmatter);
+  const output = matter.stringify(
+    content,
+    (sanitizedFrontmatter && typeof sanitizedFrontmatter === 'object')
+      ? sanitizedFrontmatter
+      : {}
+  );
   await fs.writeFile(filePath, output, 'utf-8');
+}
+
+function sanitizeFrontmatter(value: unknown): unknown {
+  if (value === undefined) return undefined;
+
+  if (Array.isArray(value)) {
+    return value
+      .map(sanitizeFrontmatter)
+      .filter((item) => item !== undefined);
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, val]) => [key, sanitizeFrontmatter(val)] as const)
+      .filter(([, val]) => val !== undefined);
+    return Object.fromEntries(entries);
+  }
+
+  return value;
 }
 
 export async function deleteFile(filePath: string): Promise<void> {
