@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, FileText, Folder, ChevronRight, ChevronDown, Trash2, Pencil, Upload } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import { marked } from 'marked';
+import TurndownService from 'turndown';
+import { Plus, FileText, Folder, ChevronRight, ChevronDown, Trash2, Pencil } from 'lucide-react';
 import { Button, Modal, Input, EmptyState, Select, Badge } from '@/components/ui';
-import type { Document, Folder as FolderType, CreateDocumentInput, CreateFolderInput } from '@/types';
+import type { Document, Folder as FolderType, CreateFolderInput } from '@/types';
 import { cn } from '@/lib/utils/cn';
-import { formatDate } from '@/lib/utils/date';
-import Link from 'next/link';
+import { formatDateTime } from '@/lib/utils/date';
 
 export default function DocsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -14,12 +18,52 @@ export default function DocsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [activeDocument, setActiveDocument] = useState<Document | null>(null);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedContent, setEditedContent] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const isSyncingRef = useRef(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'doc' | 'folder';
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Modal states
-  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
-  const [docForm, setDocForm] = useState<CreateDocumentInput>({ title: '', content: '' });
   const [folderForm, setFolderForm] = useState<CreateFolderInput>({ name: '', parentId: null });
+  const [autoSaveEnabled] = useState(true);
+  const turndownService = useMemo(() => new TurndownService({
+    headingStyle: 'atx',
+    codeBlockStyle: 'fenced',
+    emDelimiter: '*',
+    strongDelimiter: '**',
+  }), []);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({
+        placeholder: 'Start writing...',
+      }),
+    ],
+    content: '',
+    editorProps: {
+      attributes: {
+        class: 'tiptap-content',
+        spellcheck: 'true',
+      },
+    },
+    onUpdate: ({ editor: tiptap }) => {
+      if (isSyncingRef.current) return;
+      const html = tiptap.getHTML();
+      const markdown = turndownService.turndown(html);
+      setEditedContent(markdown);
+      setHasChanges(true);
+    },
+  });
 
   useEffect(() => {
     fetchData();
@@ -44,23 +88,57 @@ export default function DocsPage() {
     }
   }
 
-  async function handleCreateDocument(e: React.FormEvent) {
-    e.preventDefault();
-    if (!docForm.title.trim()) return;
-
+  async function fetchDocument(docId: string) {
     try {
+      const res = await fetch(`/api/documents/${docId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setActiveDocument(data);
+      setEditedTitle(data.title);
+      setEditedContent(data.content);
+      setHasChanges(false);
+    } catch (error) {
+      console.error('Failed to fetch document:', error);
+    }
+  }
+
+  useEffect(() => {
+    if (!editor) return;
+    if (!activeDocument) {
+      isSyncingRef.current = true;
+      editor.commands.clearContent(true);
+      isSyncingRef.current = false;
+      return;
+    }
+    isSyncingRef.current = true;
+    const html = activeDocument.content ? marked.parse(activeDocument.content) : '';
+    editor.commands.setContent(html, false);
+    isSyncingRef.current = false;
+  }, [editor, activeDocument?.id]);
+
+  async function handleCreateDocumentInline() {
+    try {
+      const siblings = documents.filter((doc) => doc.folderId === selectedFolderId);
+      const baseTitle = 'Untitled';
+      let title = baseTitle;
+      let counter = 1;
+      while (siblings.some((doc) => doc.title === title)) {
+        counter += 1;
+        title = `${baseTitle} ${counter}`;
+      }
       const res = await fetch('/api/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...docForm,
+          title,
+          content: '',
           folderId: selectedFolderId,
         }),
       });
       const newDoc = await res.json();
       setDocuments([newDoc, ...documents]);
-      setIsDocModalOpen(false);
-      setDocForm({ title: '', content: '' });
+      setSelectedDocId(newDoc.id);
+      fetchDocument(newDoc.id);
     } catch (error) {
       console.error('Failed to create document:', error);
     }
@@ -88,20 +166,23 @@ export default function DocsPage() {
     }
   }
 
-  async function handleDeleteDocument(id: string) {
-    if (!confirm('Are you sure you want to delete this document?')) return;
-
+  async function deleteDocumentById(id: string) {
     try {
       await fetch(`/api/documents/${id}`, { method: 'DELETE' });
       setDocuments(documents.filter((d) => d.id !== id));
+      if (selectedDocId === id) {
+        setSelectedDocId(null);
+        setActiveDocument(null);
+        setEditedTitle('');
+        setEditedContent('');
+        setHasChanges(false);
+      }
     } catch (error) {
       console.error('Failed to delete document:', error);
     }
   }
 
-  async function handleDeleteFolder(id: string) {
-    if (!confirm('Are you sure you want to delete this folder and all its contents?')) return;
-
+  async function deleteFolderById(id: string) {
     try {
       await fetch(`/api/folders/${id}`, { method: 'DELETE' });
       setFolders(folders.filter((f) => f.id !== id));
@@ -169,17 +250,115 @@ export default function DocsPage() {
             <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{folder.name}</span>
             <Badge className="text-[10px]">{docCount}</Badge>
             <button
-              onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name });
+              }}
+              aria-label="Delete folder"
               className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)]"
             >
               <Trash2 size={12} />
             </button>
           </div>
-          {isExpanded && renderFolderTree(folder.id, level + 1)}
+          {isExpanded && (
+            <div>
+              {renderDocumentItems(folder.id, level + 1)}
+              {renderFolderTree(folder.id, level + 1)}
+            </div>
+          )}
         </div>
       );
     });
   }
+
+  function renderDocumentItems(folderId: string | null, level: number): React.ReactNode {
+    const docs = getDocumentsInFolder(folderId);
+    return docs.map((doc) => {
+      const isActive = selectedDocId === doc.id;
+      return (
+        <div
+          key={doc.id}
+          className={cn(
+            'group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors',
+            isActive ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-elevated)]'
+          )}
+          style={{ paddingLeft: `${8 + level * 16}px` }}
+          onClick={() => selectDocument(doc)}
+        >
+          <FileText size={14} className="text-[var(--text-muted)]" />
+          <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{doc.title}</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeleteTarget({ type: 'doc', id: doc.id, name: doc.title });
+            }}
+            aria-label="Delete document"
+            className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)]"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      );
+    });
+  }
+
+  const handleSave = useCallback(async () => {
+    if (!activeDocument || isSaving) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/documents/${activeDocument.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editedTitle,
+          content: editedContent,
+        }),
+      });
+      const updated = await res.json();
+      setActiveDocument(updated);
+      setDocuments((prev) => prev.map((doc) => (doc.id === updated.id ? updated : doc)));
+      setHasChanges(false);
+    } catch (error) {
+      console.error('Failed to save document:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activeDocument, editedTitle, editedContent, isSaving]);
+
+  function handleTitleChange(value: string) {
+    setEditedTitle(value);
+    setHasChanges(true);
+  }
+
+  async function selectDocument(doc: Document) {
+    if (doc.id === selectedDocId) return;
+    if (hasChanges) {
+      const confirmSwitch = confirm('You have unsaved changes. Switch documents anyway?');
+      if (!confirmSwitch) return;
+    }
+    setSelectedFolderId(doc.folderId ?? null);
+    setSelectedDocId(doc.id);
+    await fetchDocument(doc.id);
+  }
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (hasChanges) handleSave();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasChanges, handleSave]);
+
+  useEffect(() => {
+    if (!autoSaveEnabled || !activeDocument || !hasChanges) return;
+    const timer = setTimeout(() => {
+      handleSave();
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [autoSaveEnabled, activeDocument, editedTitle, editedContent, hasChanges, handleSave]);
 
   if (isLoading) {
     return (
@@ -188,9 +367,6 @@ export default function DocsPage() {
       </div>
     );
   }
-
-  const currentDocs = getDocumentsInFolder(selectedFolderId);
-  const currentFolder = folders.find((f) => f.id === selectedFolderId);
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -212,114 +388,93 @@ export default function DocsPage() {
             <span className="text-sm text-[var(--text-primary)]">All Documents</span>
           </button>
 
+          <div className="mt-1">
+            {renderDocumentItems(null, 1)}
+          </div>
+
           <div className="mt-2">
             {renderFolderTree(null)}
           </div>
         </div>
         <div className="p-2 border-t border-[var(--border-default)]">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={() => {
-              setFolderForm({ name: '', parentId: null });
-              setIsFolderModalOpen(true);
-            }}
-          >
-            <Plus size={16} />
-            New Folder
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 justify-start"
+              onClick={() => {
+                setFolderForm({ name: '', parentId: null });
+                setIsFolderModalOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              New Folder
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 justify-start"
+              onClick={handleCreateDocumentInline}
+            >
+              <Plus size={16} />
+              New Doc
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-default)]">
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">
-              {currentFolder ? currentFolder.name : 'All Documents'}
-            </h1>
-            <p className="text-sm text-[var(--text-muted)]">
-              {currentDocs.length} document{currentDocs.length !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <Button onClick={() => setIsDocModalOpen(true)}>
-            <Plus size={18} />
-            New Document
-          </Button>
-        </div>
-
-        {/* Documents Grid */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          {currentDocs.length === 0 ? (
+        {!activeDocument ? (
+          <div className="flex-1 p-8 overflow-y-auto">
             <EmptyState
               icon={FileText}
-              title="No documents"
-              description={selectedFolderId ? "This folder is empty" : "Create your first document"}
-              action={
-                <Button onClick={() => setIsDocModalOpen(true)}>
-                  <Plus size={18} />
-                  Create Document
-                </Button>
-              }
+              title="Select a document"
+              description="Choose a document from the left to start editing"
             />
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {currentDocs.map((doc) => (
-                <Link
-                  key={doc.id}
-                  href={`/docs/${doc.id}`}
-                  className="group p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-default)] hover:border-[var(--border-strong)] transition-all"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-2 rounded-lg bg-[var(--bg-elevated)]">
-                      <FileText size={20} className="text-[var(--accent-primary)]" />
-                    </div>
-                    <button
-                      onClick={(e) => { e.preventDefault(); handleDeleteDocument(doc.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent-danger)] hover:bg-[var(--bg-elevated)] transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                  <h3 className="font-medium text-[var(--text-primary)] mb-1 truncate group-hover:text-[var(--accent-primary)] transition-colors">
-                    {doc.title}
-                  </h3>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Updated {formatDate(doc.updatedAt)}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Create Document Modal */}
-      <Modal
-        isOpen={isDocModalOpen}
-        onClose={() => setIsDocModalOpen(false)}
-        title="Create Document"
-      >
-        <form onSubmit={handleCreateDocument} className="space-y-4">
-          <Input
-            label="Title"
-            placeholder="Document title"
-            value={docForm.title}
-            onChange={(e) => setDocForm({ ...docForm, title: e.target.value })}
-            required
-          />
-          <div className="flex gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsDocModalOpen(false)} className="flex-1">
-              Cancel
-            </Button>
-            <Button type="submit" className="flex-1">
-              Create
-            </Button>
           </div>
-        </form>
-      </Modal>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-default)]">
+              <div className="flex items-center gap-3 group">
+                <input
+                  value={editedTitle}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  className="text-xl font-bold bg-transparent text-[var(--text-primary)] w-full max-w-[420px] focus-visible:outline-none"
+                />
+                <Pencil size={14} className="text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                {hasChanges && (
+                  <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-elevated)] px-2 py-0.5 rounded">
+                    Unsaved changes
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--text-muted)] mr-2">
+                  {isSaving ? 'Saving...' : `Last saved ${formatDateTime(activeDocument.updatedAt)}`}
+                </span>
+
+                <button
+                  onClick={() => setDeleteTarget({ type: 'doc', id: activeDocument.id, name: activeDocument.title })}
+                  aria-label="Delete document"
+                  className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent-danger)] hover:bg-[var(--bg-elevated)] transition-colors"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Editor/Preview */}
+            <div className="flex-1 overflow-hidden">
+              <div className="h-full tiptap-editor">
+                {editor && <EditorContent editor={editor} className="h-full" />}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Create Folder Modal */}
       <Modal
@@ -353,6 +508,47 @@ export default function DocsPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title={deleteTarget?.type === 'folder' ? 'Delete folder' : 'Delete document'}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--text-secondary)]">
+            {deleteTarget?.type === 'folder'
+              ? `Delete "${deleteTarget?.name}" and all its contents? This action cannot be undone.`
+              : `Delete "${deleteTarget?.name}"? This action cannot be undone.`}
+          </p>
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDeleteTarget(null)}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={async () => {
+                if (!deleteTarget) return;
+                const { type, id } = deleteTarget;
+                setDeleteTarget(null);
+                if (type === 'doc') {
+                  await deleteDocumentById(id);
+                } else {
+                  await deleteFolderById(id);
+                }
+              }}
+              className="flex-1"
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
