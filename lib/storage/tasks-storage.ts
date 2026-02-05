@@ -6,7 +6,7 @@ import {
   listFiles,
   DATA_DIR
 } from './file-system';
-import type { Task, CreateTaskInput, TaskStatus } from '@/types';
+import type { Task, CreateTaskInput, TaskStatus, TaskAttachment, TaskComment } from '@/types';
 import { generateId } from '@/lib/utils/id';
 import { toISOString } from '@/lib/utils/date';
 
@@ -20,6 +20,18 @@ function getTaskPath(projectSlug: string, taskId: string): string {
   return path.join(getTasksDir(projectSlug), `${taskId}.md`);
 }
 
+export function getTaskAttachmentsDir(projectSlug: string, taskId: string): string {
+  return path.join(PROJECTS_DIR, projectSlug, 'attachments', taskId);
+}
+
+export function getTaskAttachmentPath(
+  projectSlug: string,
+  taskId: string,
+  storageName: string
+): string {
+  return path.join(getTaskAttachmentsDir(projectSlug, taskId), storageName);
+}
+
 interface TaskFrontmatter {
   id: string;
   projectId: string;
@@ -29,6 +41,8 @@ interface TaskFrontmatter {
   priority: string;
   assignedDeveloperId?: string;
   linkedDocumentIds: string[];
+  attachments?: TaskAttachment[];
+  comments?: TaskComment[];
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -48,9 +62,13 @@ export async function getTasks(projectSlug: string): Promise<Task[]> {
 
     if (result) {
       const recurring = result.data.recurring ?? result.data.status === 'recurring';
+      const attachments = result.data.attachments ?? [];
+      const comments = result.data.comments ?? [];
       tasks.push({
         ...result.data,
         recurring,
+        attachments,
+        comments,
         description: result.content.trim(),
         priority: result.data.priority as Task['priority'],
       });
@@ -67,9 +85,13 @@ export async function getTask(projectSlug: string, taskId: string): Promise<Task
   if (!result) return null;
 
   const recurring = result.data.recurring ?? result.data.status === 'recurring';
+  const attachments = result.data.attachments ?? [];
+  const comments = result.data.comments ?? [];
   return {
     ...result.data,
     recurring,
+    attachments,
+    comments,
     description: result.content.trim(),
     priority: result.data.priority as Task['priority'],
   };
@@ -95,6 +117,8 @@ export async function createTask(projectSlug: string, input: CreateTaskInput): P
     priority: input.priority || 'medium',
     assignedDeveloperId: input.assignedDeveloperId,
     linkedDocumentIds: input.linkedDocumentIds || [],
+    attachments: input.attachments || [],
+    comments: input.comments || [],
     order: statusTasks.length,
     createdAt: now,
     updatedAt: now,
@@ -109,6 +133,8 @@ export async function createTask(projectSlug: string, input: CreateTaskInput): P
     priority: task.priority,
     assignedDeveloperId: task.assignedDeveloperId,
     linkedDocumentIds: task.linkedDocumentIds,
+    attachments: task.attachments,
+    comments: task.comments,
     order: task.order,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -130,6 +156,8 @@ export async function updateTask(
 
   let nextStatus = updates.status ?? task.status;
   let nextRecurring = updates.recurring ?? task.recurring;
+  const nextAttachments = updates.attachments ?? task.attachments;
+  const nextComments = updates.comments ?? task.comments;
 
   if (updates.status) {
     nextRecurring = updates.status === 'recurring';
@@ -148,6 +176,8 @@ export async function updateTask(
     ...updates,
     status: nextStatus,
     recurring: nextRecurring,
+    attachments: nextAttachments,
+    comments: nextComments,
     updatedAt: toISOString(),
   };
 
@@ -165,6 +195,8 @@ export async function updateTask(
     priority: updatedTask.priority,
     assignedDeveloperId: updatedTask.assignedDeveloperId,
     linkedDocumentIds: updatedTask.linkedDocumentIds,
+    attachments: updatedTask.attachments,
+    comments: updatedTask.comments,
     order: updatedTask.order,
     createdAt: updatedTask.createdAt,
     updatedAt: updatedTask.updatedAt,

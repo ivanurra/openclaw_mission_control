@@ -6,7 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
-import { Plus, FileText, Folder, ChevronRight, ChevronDown, Trash2, Pencil } from 'lucide-react';
+import { Plus, FileText, Folder, ChevronRight, ChevronDown, Trash2, Pencil, Search, X } from 'lucide-react';
 import { Button, Modal, Input, EmptyState, Select, Badge } from '@/components/ui';
 import type { Document, Folder as FolderType, CreateFolderInput } from '@/types';
 import { cn } from '@/lib/utils/cn';
@@ -24,6 +24,7 @@ export default function DocsPage() {
   const [editedContent, setEditedContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [docSearchQuery, setDocSearchQuery] = useState('');
   const isSyncingRef = useRef(false);
   const [deleteTarget, setDeleteTarget] = useState<{
     type: 'doc' | 'folder';
@@ -35,6 +36,7 @@ export default function DocsPage() {
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [folderForm, setFolderForm] = useState<CreateFolderInput>({ name: '', parentId: null });
   const [autoSaveEnabled] = useState(true);
+  const folderMap = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
   const turndownService = useMemo(() => new TurndownService({
     headingStyle: 'atx',
     codeBlockStyle: 'fenced',
@@ -210,6 +212,28 @@ export default function DocsPage() {
   function getDocumentsInFolder(folderId: string | null): Document[] {
     return documents.filter((d) => d.folderId === folderId);
   }
+
+  function getFolderPath(folderId: string | null): string {
+    if (!folderId) return 'All Documents';
+    const parts: string[] = [];
+    let currentId: string | null = folderId;
+    while (currentId) {
+      const folder = folderMap.get(currentId);
+      if (!folder) break;
+      parts.unshift(folder.name);
+      currentId = folder.parentId;
+    }
+    return parts.length > 0 ? parts.join(' / ') : 'All Documents';
+  }
+
+  const docSearchResults = useMemo(() => {
+    const query = docSearchQuery.trim().toLowerCase();
+    if (!query) return [];
+
+    return documents
+      .filter((doc) => `${doc.title} ${doc.content}`.toLowerCase().includes(query))
+      .slice(0, 20);
+  }, [documents, docSearchQuery]);
 
   function buildFolderOptions(parentId: string | null, depth: number = 0): { value: string; label: string }[] {
     return getChildFolders(parentId).flatMap((folder) => ([
@@ -397,6 +421,67 @@ export default function DocsPage() {
           </div>
         </div>
         <div className="p-2 border-t border-[var(--border-default)]">
+          <div className="mb-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                value={docSearchQuery}
+                onChange={(e) => setDocSearchQuery(e.target.value)}
+                placeholder="Search documents..."
+                aria-label="Search documents"
+                className={cn(
+                  'w-full pl-8 pr-8 py-1.5 rounded-lg text-sm',
+                  'bg-[var(--bg-tertiary)] border border-[var(--border-default)]',
+                  'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
+                  'focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]',
+                  'transition-colors'
+                )}
+              />
+              {docSearchQuery && (
+                <button
+                  onClick={() => setDocSearchQuery('')}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {docSearchQuery && (
+              <div
+                className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)]"
+                data-testid="doc-search-results"
+              >
+                {docSearchResults.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                    No documents found.
+                  </div>
+                ) : (
+                  docSearchResults.map((doc) => (
+                    <button
+                      key={doc.id}
+                      type="button"
+                      onClick={() => {
+                        selectDocument(doc);
+                        setDocSearchQuery('');
+                      }}
+                      className="w-full text-left px-3 py-2 border-b border-[var(--border-default)] last:border-b-0 hover:bg-[var(--bg-elevated)] transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText size={12} className="text-[var(--text-muted)]" />
+                        <span className="text-sm text-[var(--text-primary)] truncate">{doc.title}</span>
+                      </div>
+                      <span className="text-xs text-[var(--text-muted)] truncate">
+                        {getFolderPath(doc.folderId)}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button
               variant="ghost"

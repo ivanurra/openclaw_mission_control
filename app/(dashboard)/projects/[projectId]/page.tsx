@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   DndContext,
@@ -20,13 +20,14 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { ArrowLeft, Plus, Settings, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Settings, Trash2, Paperclip, MessageSquare, Send, Clock, X } from 'lucide-react';
 import Link from 'next/link';
-import { Button, Modal, Input, Textarea, Select, Badge, Avatar } from '@/components/ui';
-import type { Project, Task, Developer, TaskStatus, CreateTaskInput, TaskPriority } from '@/types';
+import { Button, Modal, Input, Textarea, Select, Avatar } from '@/components/ui';
+import type { Project, Task, Developer, TaskStatus, CreateTaskInput, TaskPriority, TaskAttachment, TaskComment } from '@/types';
 import { KANBAN_COLUMNS, PRIORITIES } from '@/lib/constants/kanban';
 import { KanbanColumn } from '@/components/projects/kanban-column';
 import { TaskCard } from '@/components/projects/task-card';
+import { formatDateTime } from '@/lib/utils/date';
 
 interface Props {
   params: Promise<{ projectId: string }>;
@@ -48,6 +49,11 @@ export default function ProjectKanbanPage({ params }: Props) {
   const [projectName, setProjectName] = useState('');
   const [isSavingProject, setIsSavingProject] = useState(false);
   const [projectSaveError, setProjectSaveError] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [isPostingComment, setIsPostingComment] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   // Modal states
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -292,6 +298,96 @@ export default function ProjectKanbanPage({ params }: Props) {
     }
   }
 
+  function applyTaskUpdate(updatedTask: Task) {
+    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+    if (editingTask?.id === updatedTask.id) {
+      setEditingTask(updatedTask);
+    }
+  }
+
+  async function handleAttachmentUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    if (!editingTask) return;
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length === 0) return;
+
+    setIsUploadingAttachment(true);
+    setAttachmentError(null);
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('files', file));
+
+      const res = await fetch(`/api/projects/${projectId}/tasks/${editingTask.id}/attachments`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to upload attachment');
+      }
+
+      const updated = await res.json();
+      applyTaskUpdate(updated);
+    } catch (error) {
+      console.error('Failed to upload attachment:', error);
+      setAttachmentError('Could not upload attachment.');
+    } finally {
+      setIsUploadingAttachment(false);
+      if (event.target) event.target.value = '';
+    }
+  }
+
+  async function handleRemoveAttachment(attachment: TaskAttachment) {
+    if (!editingTask) return;
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/tasks/${editingTask.id}/attachments/${attachment.id}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) {
+        throw new Error('Failed to remove attachment');
+      }
+      const updated = await res.json();
+      applyTaskUpdate(updated);
+    } catch (error) {
+      console.error('Failed to remove attachment:', error);
+      setAttachmentError('Could not remove attachment.');
+    }
+  }
+
+  async function handleAddComment() {
+    if (!editingTask) return;
+    const trimmed = commentDraft.trim();
+    if (!trimmed) return;
+
+    const newComment: TaskComment = {
+      id: getClientId(),
+      authorName: 'You',
+      content: trimmed,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      setIsPostingComment(true);
+      const updatedComments = [...(editingTask.comments || []), newComment];
+      const res = await fetch(`/api/projects/${projectId}/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comments: updatedComments }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to add comment');
+      }
+      const updated = await res.json();
+      applyTaskUpdate(updated);
+      setCommentDraft('');
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+    } finally {
+      setIsPostingComment(false);
+    }
+  }
+
   function handleDeleteTask(task: Task) {
     setTaskToDelete(task);
   }
@@ -362,6 +458,50 @@ export default function ProjectKanbanPage({ params }: Props) {
     }
   }
 
+  const detailTask = editingTask;
+
+  const mentionQuery = useMemo(() => {
+    const match = commentDraft.match(/@([\w\s.-]*)$/);
+    return match ? match[1].trim().toLowerCase() : '';
+  }, [commentDraft]);
+
+  const mentionSuggestions = useMemo(() => {
+    if (!mentionQuery) return [];
+    return developers
+      .filter((dev) => dev.name.toLowerCase().includes(mentionQuery))
+      .slice(0, 5);
+  }, [developers, mentionQuery]);
+
+  function insertMention(name: string) {
+    setCommentDraft((prev) => prev.replace(/@([\w\s.-]*)$/, `@${name} `));
+  }
+
+  function formatFileSize(size: number): string {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function renderCommentContent(content: string) {
+    const parts = content.split(/(@[\w.-]+)/g);
+    return parts.map((part, index) =>
+      part.startsWith('@') ? (
+        <span key={`${part}-${index}`} className="text-[var(--accent-primary)] font-medium">
+          {part}
+        </span>
+      ) : (
+        <span key={`${part}-${index}`}>{part}</span>
+      )
+    );
+  }
+
+  function getClientId(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   function openCreateTaskModal(status: TaskStatus = 'backlog') {
     setEditingTask(null);
     setTaskForm({
@@ -373,6 +513,8 @@ export default function ProjectKanbanPage({ params }: Props) {
       priority: 'medium',
       assignedDeveloperId: undefined,
     });
+    setCommentDraft('');
+    setAttachmentError(null);
     setIsTaskModalOpen(true);
   }
 
@@ -387,6 +529,8 @@ export default function ProjectKanbanPage({ params }: Props) {
       priority: task.priority,
       assignedDeveloperId: task.assignedDeveloperId,
     });
+    setCommentDraft('');
+    setAttachmentError(null);
     setIsTaskModalOpen(true);
   }
 
@@ -402,6 +546,8 @@ export default function ProjectKanbanPage({ params }: Props) {
       priority: 'medium',
       assignedDeveloperId: undefined,
     });
+    setCommentDraft('');
+    setAttachmentError(null);
   }
 
   if (isLoading) {
@@ -582,7 +728,7 @@ export default function ProjectKanbanPage({ params }: Props) {
         isOpen={isTaskModalOpen}
         onClose={closeTaskModal}
         title={editingTask ? 'Edit Task' : 'Create Task'}
-        size="lg"
+        size="xl"
       >
         <form onSubmit={editingTask ? handleUpdateTask : handleCreateTask} className="space-y-4">
           <Input
@@ -633,6 +779,168 @@ export default function ProjectKanbanPage({ params }: Props) {
               ...developers.map((d) => ({ value: d.id, label: d.name })),
             ]}
           />
+
+          {detailTask ? (
+            <div className="space-y-6 pt-2">
+              {/* Timeline */}
+              <div className="border-t border-[var(--border-default)] pt-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                  <Clock size={12} />
+                  Timeline
+                </div>
+                <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
+                  <div className="flex items-center justify-between">
+                    <span>Created</span>
+                    <span>{formatDateTime(detailTask.createdAt)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Updated</span>
+                    <span>{formatDateTime(detailTask.updatedAt)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Attachments */}
+              <div className="border-t border-[var(--border-default)] pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                    <Paperclip size={12} />
+                    Attachments ({detailTask.attachments?.length ?? 0})
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={attachmentInputRef}
+                      type="file"
+                      multiple
+                      onChange={handleAttachmentUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => attachmentInputRef.current?.click()}
+                      disabled={isUploadingAttachment}
+                    >
+                      {isUploadingAttachment ? 'Uploading...' : 'Add files'}
+                    </Button>
+                  </div>
+                </div>
+                {attachmentError && (
+                  <p className="mt-2 text-sm text-[var(--accent-danger)]">{attachmentError}</p>
+                )}
+                <div className="mt-3 space-y-2">
+                  {(detailTask.attachments?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-[var(--text-muted)]">No attachments yet.</p>
+                  ) : (
+                    (detailTask.attachments ?? []).map((attachment) => (
+                      <div
+                        key={attachment.id}
+                        className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)]"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-[var(--text-primary)] truncate">
+                            {attachment.name}
+                          </p>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            {formatFileSize(attachment.size)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/api/projects/${projectId}/tasks/${detailTask.id}/attachments/${attachment.id}`}
+                            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                          >
+                            Download
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttachment(attachment)}
+                            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)] hover:bg-[var(--bg-elevated)]"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Comments */}
+              <div className="border-t border-[var(--border-default)] pt-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                  <MessageSquare size={12} />
+                  Comments ({detailTask.comments?.length ?? 0})
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  {(detailTask.comments?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-[var(--text-muted)]">No comments yet.</p>
+                  ) : (
+                    (detailTask.comments ?? []).map((comment) => (
+                      <div key={comment.id} className="flex gap-3">
+                        <Avatar name={comment.authorName} color="#6366f1" size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-[var(--text-primary)]">
+                              {comment.authorName}
+                            </span>
+                            <span className="text-xs text-[var(--text-muted)]">
+                              {formatDateTime(comment.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-[var(--text-secondary)] mt-1 break-words">
+                            {renderCommentContent(comment.content)}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  <div className="relative">
+                    <Textarea
+                      label="Add a comment"
+                      placeholder="Type your comment and use @ to mention someone"
+                      value={commentDraft}
+                      onChange={(e) => setCommentDraft(e.target.value)}
+                      className="min-h-[90px]"
+                    />
+
+                    {mentionSuggestions.length > 0 && (
+                      <div className="absolute left-0 bottom-full mb-2 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] shadow-lg overflow-hidden z-10">
+                        {mentionSuggestions.map((dev) => (
+                          <button
+                            key={dev.id}
+                            type="button"
+                            onClick={() => insertMention(dev.name)}
+                            className="w-full text-left px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                          >
+                            {dev.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAddComment}
+                      disabled={isPostingComment || commentDraft.trim().length === 0}
+                    >
+                      {isPostingComment ? 'Posting...' : 'Post Comment'}
+                      <Send size={14} />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="border-t border-[var(--border-default)] pt-4 text-sm text-[var(--text-muted)]">
+              Save the task to add timeline details, attachments, and comments.
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={closeTaskModal} className="flex-1">

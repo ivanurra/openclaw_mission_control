@@ -23,13 +23,11 @@ describe('TaskSearch', () => {
     vi.unstubAllGlobals();
   });
 
-  it('disables search when not inside a project', () => {
+  it('does not render search when not inside a project', () => {
     pathname = '/projects';
     render(<TaskSearch />);
 
-    const input = screen.getByLabelText('Search tasks');
-    expect(input).toBeDisabled();
-    expect(input).toHaveAttribute('placeholder', 'Search tasks (open a project)');
+    expect(screen.queryByLabelText('Search tasks')).not.toBeInTheDocument();
   });
 
   it('searches tasks and navigates to selected result', async () => {

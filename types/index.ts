@@ -2,6 +2,23 @@
 export type TaskStatus = 'recurring' | 'backlog' | 'todo' | 'in_progress' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  createdAt: string;
+  storageName?: string;
+}
+
+export interface TaskComment {
+  id: string;
+  authorName: string;
+  authorId?: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface Project {
   id: string;
   slug: string;
@@ -30,6 +47,8 @@ export interface Task {
   priority: TaskPriority;
   assignedDeveloperId?: string;
   linkedDocumentIds: string[];
+  attachments: TaskAttachment[];
+  comments: TaskComment[];
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +64,8 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   assignedDeveloperId?: string;
   linkedDocumentIds?: string[];
+  attachments?: TaskAttachment[];
+  comments?: TaskComment[];
 }
 
 // Developer Types

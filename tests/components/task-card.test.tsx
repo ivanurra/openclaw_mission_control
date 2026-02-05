@@ -16,6 +16,8 @@ const baseTask: Task = {
   priority: 'medium',
   assignedDeveloperId: undefined,
   linkedDocumentIds: [],
+  attachments: [],
+  comments: [],
   order: 0,
   createdAt: '2025-01-01T00:00:00Z',
   updatedAt: '2025-01-01T00:00:00Z',

@@ -11,7 +11,7 @@ interface LogoProps {
 
 export function Logo({ showText = true, size = 'md', className }: LogoProps) {
   const sizes = {
-    sm: { icon: 24, text: 'text-lg' },
+    sm: { icon: 26, text: 'text-[1.2rem]' },
     md: { icon: 32, text: 'text-xl' },
     lg: { icon: 40, text: 'text-2xl' },
   };

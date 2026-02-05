@@ -66,9 +66,9 @@ export function TaskSearch() {
   }, [isOpen, projectId]);
 
   useEffect(() => {
+    if (!projectId) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === '/' && !isTypingInField(event.target)) {
-        if (!projectId) return;
         event.preventDefault();
         setIsOpen(true);
         inputRef.current?.focus();
@@ -115,7 +115,9 @@ export function TaskSearch() {
     router.push(`/projects/${projectId}?task=${task.id}`);
   }
 
-  const isDisabled = !projectId;
+  if (!projectId) {
+    return null;
+  }
 
   return (
     <div ref={containerRef} className="relative hidden md:flex items-center">
@@ -129,26 +131,24 @@ export function TaskSearch() {
           setIsOpen(true);
         }}
         onFocus={() => {
-          if (!isDisabled) setIsOpen(true);
+          setIsOpen(true);
         }}
-        placeholder={isDisabled ? 'Search tasks (open a project)' : 'Search tasks...'}
-        disabled={isDisabled}
+        placeholder="Search tasks..."
         className={cn(
           'w-64 pl-9 pr-12 py-1.5 rounded-lg text-sm',
           'bg-[var(--bg-tertiary)] border border-[var(--border-default)]',
           'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
           'focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]',
           'transition-colors',
-          isDisabled && 'opacity-60 cursor-not-allowed'
         )}
         aria-label="Search tasks"
-        title={isDisabled ? 'Open a project to search tasks' : 'Search tasks in this project'}
+        title="Search tasks in this project"
       />
       <kbd className="absolute right-3 px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] text-xs text-[var(--text-muted)]">
         /
       </kbd>
 
-      {isOpen && !isDisabled && (
+      {isOpen && (
         <div className="absolute right-0 top-full mt-2 w-96 max-w-[90vw] rounded-xl border border-[var(--border-default)] bg-[var(--bg-secondary)] shadow-lg overflow-hidden z-50">
           <div className="px-3 py-2 text-xs text-[var(--text-muted)] border-b border-[var(--border-default)]">
             Busca por título o descripción

@@ -16,6 +16,7 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const showTaskSearch = /^\/projects\/[^/]+/.test(pathname);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
@@ -50,7 +51,7 @@ export function Navbar() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        <TaskSearch />
+        {showTaskSearch && <TaskSearch />}
       </div>
     </header>
   );

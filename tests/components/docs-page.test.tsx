@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import DocsPage from '../../app/(dashboard)/docs/page';
@@ -66,6 +66,60 @@ describe('DocsPage', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /new folder/i }));
     expect(await screen.findByText('Create Folder')).toBeInTheDocument();
+  });
+
+  it('filters documents with the sidebar search', async () => {
+    mockFetchSequence([
+      [
+        {
+          id: 'd1',
+          slug: 'ice-log',
+          title: 'Ice Log',
+          content: 'Log content',
+          folderId: null,
+          linkedTaskIds: [],
+          linkedProjectIds: [],
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z',
+        },
+        {
+          id: 'd2',
+          slug: 'crew-notes',
+          title: 'Crew Notes',
+          content: 'Some notes',
+          folderId: null,
+          linkedTaskIds: [],
+          linkedProjectIds: [],
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z',
+        },
+      ],
+      [],
+      {
+        id: 'd1',
+        slug: 'ice-log',
+        title: 'Ice Log',
+        content: 'Log content',
+        folderId: null,
+        linkedTaskIds: [],
+        linkedProjectIds: [],
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+    ]);
+
+    render(<DocsPage />);
+
+    const user = userEvent.setup();
+    const searchInput = await screen.findByLabelText('Search documents');
+    await user.type(searchInput, 'Ice');
+
+    const results = await screen.findByTestId('doc-search-results');
+    expect(within(results).getByText('Ice Log')).toBeInTheDocument();
+    expect(within(results).queryByText('Crew Notes')).not.toBeInTheDocument();
+
+    await user.click(within(results).getByText('Ice Log'));
+    expect(await screen.findByDisplayValue('Ice Log')).toBeInTheDocument();
   });
 
   it('creates a document inline and opens the editor', async () => {
