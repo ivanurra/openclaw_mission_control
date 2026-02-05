@@ -1,5 +1,5 @@
 // Project Types
-export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'done';
+export type TaskStatus = 'recurring' | 'backlog' | 'todo' | 'in_progress' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface Project {
@@ -26,6 +26,7 @@ export interface Task {
   title: string;
   description: string;
   status: TaskStatus;
+  recurring: boolean;
   priority: TaskPriority;
   assignedDeveloperId?: string;
   linkedDocumentIds: string[];
@@ -40,6 +41,7 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   status?: TaskStatus;
+  recurring?: boolean;
   priority?: TaskPriority;
   assignedDeveloperId?: string;
   linkedDocumentIds?: string[];

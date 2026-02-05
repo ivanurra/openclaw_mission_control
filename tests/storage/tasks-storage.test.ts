@@ -48,4 +48,25 @@ describe('tasks-storage', () => {
       expect(updated?.completedAt).toBeTruthy();
     });
   });
+
+  it('creates recurring tasks and preserves recurring status', async () => {
+    await withStorage(async () => {
+      const projects = await import('../../lib/storage/projects-storage');
+      const tasks = await import('../../lib/storage/tasks-storage');
+
+      const project = await projects.createProject({ name: 'Rhythm' });
+      const recurring = await tasks.createTask(project.slug, {
+        projectId: project.id,
+        title: 'Weekly sync',
+        status: 'recurring',
+      });
+
+      expect(recurring.status).toBe('recurring');
+      expect(recurring.recurring).toBe(true);
+
+      const fetched = await tasks.getTask(project.slug, recurring.id);
+      expect(fetched?.status).toBe('recurring');
+      expect(fetched?.recurring).toBe(true);
+    });
+  });
 });

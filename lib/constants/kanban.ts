@@ -1,6 +1,7 @@
 import type { TaskStatus, TaskPriority } from '@/types';
 
 export const KANBAN_COLUMNS: { id: TaskStatus; label: string }[] = [
+  { id: 'recurring', label: 'Recurring' },
   { id: 'backlog', label: 'Backlog' },
   { id: 'todo', label: 'To Do' },
   { id: 'in_progress', label: 'In Progress' },

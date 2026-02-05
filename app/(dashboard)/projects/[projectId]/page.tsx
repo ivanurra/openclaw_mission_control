@@ -60,6 +60,7 @@ export default function ProjectKanbanPage({ params }: Props) {
     title: '',
     description: '',
     status: 'backlog',
+    recurring: false,
     priority: 'medium',
     assignedDeveloperId: undefined,
   });
@@ -159,7 +160,9 @@ export default function ProjectKanbanPage({ params }: Props) {
     if (overColumn && activeTask.status !== overColumn.id) {
       setTasks((tasks) =>
         tasks.map((t) =>
-          t.id === activeTask.id ? { ...t, status: overColumn.id } : t
+          t.id === activeTask.id
+            ? { ...t, status: overColumn.id, recurring: overColumn.id === 'recurring' }
+            : t
         )
       );
     }
@@ -169,7 +172,9 @@ export default function ProjectKanbanPage({ params }: Props) {
     if (overTask && activeTask.status !== overTask.status) {
       setTasks((tasks) =>
         tasks.map((t) =>
-          t.id === activeTask.id ? { ...t, status: overTask.status } : t
+          t.id === activeTask.id
+            ? { ...t, status: overTask.status, recurring: overTask.status === 'recurring' }
+            : t
         )
       );
     }
@@ -214,7 +219,9 @@ export default function ProjectKanbanPage({ params }: Props) {
     // Update local state
     setTasks(
       newTasks.map((t) =>
-        t.id === activeTask.id ? { ...t, status: newStatus } : t
+        t.id === activeTask.id
+          ? { ...t, status: newStatus, recurring: newStatus === 'recurring' }
+          : t
       )
     );
 
@@ -223,7 +230,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       await fetch(`/api/projects/${projectId}/tasks/${activeTask.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, recurring: newStatus === 'recurring' }),
       });
 
       // Reorder tasks
@@ -248,12 +255,14 @@ export default function ProjectKanbanPage({ params }: Props) {
     if (!taskForm.title.trim()) return;
 
     try {
+      const recurring = taskForm.status === 'recurring' || taskForm.recurring;
       const res = await fetch(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...taskForm,
           projectId: project?.id,
+          recurring,
         }),
       });
       const newTask = await res.json();
@@ -269,10 +278,11 @@ export default function ProjectKanbanPage({ params }: Props) {
     if (!editingTask || !taskForm.title.trim()) return;
 
     try {
+      const recurring = taskForm.status === 'recurring' || taskForm.recurring;
       const res = await fetch(`/api/projects/${projectId}/tasks/${editingTask.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(taskForm),
+        body: JSON.stringify({ ...taskForm, recurring }),
       });
       const updated = await res.json();
       setTasks(tasks.map((t) => (t.id === updated.id ? updated : t)));
@@ -359,6 +369,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       title: '',
       description: '',
       status,
+      recurring: status === 'recurring',
       priority: 'medium',
       assignedDeveloperId: undefined,
     });
@@ -372,6 +383,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       title: task.title,
       description: task.description,
       status: task.status,
+      recurring: task.recurring,
       priority: task.priority,
       assignedDeveloperId: task.assignedDeveloperId,
     });
@@ -386,6 +398,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       title: '',
       description: '',
       status: 'backlog',
+      recurring: false,
       priority: 'medium',
       assignedDeveloperId: undefined,
     });
@@ -403,9 +416,12 @@ export default function ProjectKanbanPage({ params }: Props) {
     return null;
   }
 
-  const taskCount = tasks.length;
+  const totalTasks = tasks.filter((t) =>
+    t.status === 'todo' || t.status === 'in_progress' || t.status === 'done'
+  ).length;
+  const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
   const doneCount = tasks.filter((t) => t.status === 'done').length;
-  const completionRate = taskCount > 0 ? Math.round((doneCount / taskCount) * 100) : 0;
+  const completionRate = totalTasks > 0 ? Math.round((doneCount / totalTasks) * 100) : 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -428,9 +444,6 @@ export default function ProjectKanbanPage({ params }: Props) {
                 {project.name}
               </h1>
             </div>
-            <p className="text-sm text-[var(--text-muted)] mt-0.5">
-              {taskCount} task{taskCount !== 1 ? 's' : ''} · {completionRate}% complete
-            </p>
           </div>
         </div>
 
@@ -467,10 +480,49 @@ export default function ProjectKanbanPage({ params }: Props) {
 
           <button
             onClick={() => setIsSettingsModalOpen(true)}
+            aria-label="Project settings"
             className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
           >
             <Settings size={20} />
           </button>
+        </div>
+      </div>
+
+      {/* Project Metrics */}
+      <div className="px-6 py-4 border-b border-[var(--border-default)]">
+        <div className="flex flex-wrap items-center gap-8" data-testid="project-metrics">
+          <div className="flex flex-col gap-1">
+            <span className="text-[var(--text-primary)] text-3xl font-semibold tracking-tight">
+              {totalTasks}
+            </span>
+            <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Total Tasks
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[var(--accent-primary)] text-3xl font-semibold tracking-tight">
+              {inProgressCount}
+            </span>
+            <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              In Progress
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[var(--accent-success)] text-3xl font-semibold tracking-tight">
+              {doneCount}
+            </span>
+            <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Completed
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[var(--accent-success)] text-3xl font-semibold tracking-tight">
+              {completionRate}%
+            </span>
+            <span className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              Completion
+            </span>
+          </div>
         </div>
       </div>
 
@@ -553,7 +605,14 @@ export default function ProjectKanbanPage({ params }: Props) {
             <Select
               label="Status"
               value={taskForm.status}
-              onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value as TaskStatus })}
+              onChange={(e) => {
+                const nextStatus = e.target.value as TaskStatus;
+                setTaskForm({
+                  ...taskForm,
+                  status: nextStatus,
+                  recurring: nextStatus === 'recurring',
+                });
+              }}
               options={KANBAN_COLUMNS.map((c) => ({ value: c.id, label: c.label }))}
             />
 

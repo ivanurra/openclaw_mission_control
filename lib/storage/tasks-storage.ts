@@ -25,6 +25,7 @@ interface TaskFrontmatter {
   projectId: string;
   title: string;
   status: TaskStatus;
+  recurring?: boolean;
   priority: string;
   assignedDeveloperId?: string;
   linkedDocumentIds: string[];
@@ -46,8 +47,10 @@ export async function getTasks(projectSlug: string): Promise<Task[]> {
     const result = await readMarkdownFile<TaskFrontmatter>(filePath);
 
     if (result) {
+      const recurring = result.data.recurring ?? result.data.status === 'recurring';
       tasks.push({
         ...result.data,
+        recurring,
         description: result.content.trim(),
         priority: result.data.priority as Task['priority'],
       });
@@ -63,8 +66,10 @@ export async function getTask(projectSlug: string, taskId: string): Promise<Task
 
   if (!result) return null;
 
+  const recurring = result.data.recurring ?? result.data.status === 'recurring';
   return {
     ...result.data,
+    recurring,
     description: result.content.trim(),
     priority: result.data.priority as Task['priority'],
   };
@@ -72,7 +77,10 @@ export async function getTask(projectSlug: string, taskId: string): Promise<Task
 
 export async function createTask(projectSlug: string, input: CreateTaskInput): Promise<Task> {
   const existingTasks = await getTasks(projectSlug);
-  const statusTasks = existingTasks.filter(t => t.status === (input.status || 'backlog'));
+  const requestedStatus = input.status || 'backlog';
+  const recurring = input.recurring ?? requestedStatus === 'recurring';
+  const status: TaskStatus = recurring ? 'recurring' : requestedStatus;
+  const statusTasks = existingTasks.filter(t => t.status === status);
 
   const now = toISOString();
   const id = generateId();
@@ -82,7 +90,8 @@ export async function createTask(projectSlug: string, input: CreateTaskInput): P
     projectId: input.projectId,
     title: input.title,
     description: input.description || '',
-    status: input.status || 'backlog',
+    status,
+    recurring,
     priority: input.priority || 'medium',
     assignedDeveloperId: input.assignedDeveloperId,
     linkedDocumentIds: input.linkedDocumentIds || [],
@@ -96,6 +105,7 @@ export async function createTask(projectSlug: string, input: CreateTaskInput): P
     projectId: task.projectId,
     title: task.title,
     status: task.status,
+    recurring: task.recurring,
     priority: task.priority,
     assignedDeveloperId: task.assignedDeveloperId,
     linkedDocumentIds: task.linkedDocumentIds,
@@ -118,9 +128,26 @@ export async function updateTask(
   const task = await getTask(projectSlug, taskId);
   if (!task) return null;
 
+  let nextStatus = updates.status ?? task.status;
+  let nextRecurring = updates.recurring ?? task.recurring;
+
+  if (updates.status) {
+    nextRecurring = updates.status === 'recurring';
+  }
+
+  if (updates.recurring !== undefined) {
+    if (updates.recurring) {
+      nextStatus = 'recurring';
+    } else if (nextStatus === 'recurring') {
+      nextStatus = 'backlog';
+    }
+  }
+
   const updatedTask: Task = {
     ...task,
     ...updates,
+    status: nextStatus,
+    recurring: nextRecurring,
     updatedAt: toISOString(),
   };
 
@@ -134,6 +161,7 @@ export async function updateTask(
     projectId: updatedTask.projectId,
     title: updatedTask.title,
     status: updatedTask.status,
+    recurring: updatedTask.recurring,
     priority: updatedTask.priority,
     assignedDeveloperId: updatedTask.assignedDeveloperId,
     linkedDocumentIds: updatedTask.linkedDocumentIds,

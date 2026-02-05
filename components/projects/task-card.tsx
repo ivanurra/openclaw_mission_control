@@ -78,6 +78,7 @@ export function TaskCard({ task, developer, isDragging, onEdit, onDelete }: Task
               event.stopPropagation();
               setShowMenu(!showMenu);
             }}
+            aria-label="Task actions"
             className="p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
           >
             <MoreHorizontal size={14} />
