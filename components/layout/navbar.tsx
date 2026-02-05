@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, FileText, Users, MessageSquare, Search } from 'lucide-react';
+import { LayoutGrid, FileText, Users, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { Logo } from './logo';
+import { TaskSearch } from './task-search';
 
 const navItems = [
   { label: 'Projects', href: '/projects', icon: LayoutGrid },
@@ -49,14 +50,7 @@ export function Navbar() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Search placeholder */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-default)] text-[var(--text-muted)]">
-          <Search size={16} />
-          <span className="text-sm">Search...</span>
-          <kbd className="ml-2 px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] text-xs">
-            /
-          </kbd>
-        </div>
+        <TaskSearch />
       </div>
     </header>
   );

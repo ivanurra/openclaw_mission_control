@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   DndContext,
   DragOverlay,
@@ -35,17 +35,26 @@ interface Props {
 export default function ProjectKanbanPage({ params }: Props) {
   const { projectId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const taskIdFromQuery = searchParams.get('task');
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const [projectSaveError, setProjectSaveError] = useState<string | null>(null);
 
   // Modal states
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isDeleteProjectModalOpen, setIsDeleteProjectModalOpen] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
   const [taskForm, setTaskForm] = useState<CreateTaskInput>({
     projectId: '',
     title: '',
@@ -73,6 +82,22 @@ export default function ProjectKanbanPage({ params }: Props) {
   useEffect(() => {
     fetchData();
   }, [projectId]);
+
+  useEffect(() => {
+    if (project) {
+      setProjectName(project.name);
+    }
+  }, [project]);
+
+  useEffect(() => {
+    if (!taskIdFromQuery || tasks.length === 0) return;
+
+    const task = tasks.find((t) => t.id === taskIdFromQuery);
+    if (!task) return;
+
+    openEditTaskModal(task);
+    router.replace(`/projects/${projectId}`);
+  }, [taskIdFromQuery, tasks, projectId, router]);
 
   async function fetchData() {
     try {
@@ -257,27 +282,73 @@ export default function ProjectKanbanPage({ params }: Props) {
     }
   }
 
-  async function handleDeleteTask(taskId: string) {
-    if (!confirm('Are you sure you want to delete this task?')) return;
+  function handleDeleteTask(task: Task) {
+    setTaskToDelete(task);
+  }
 
+  async function confirmDeleteTask() {
+    if (!taskToDelete) return;
     try {
-      await fetch(`/api/projects/${projectId}/tasks/${taskId}`, {
+      setIsDeletingTask(true);
+      await fetch(`/api/projects/${projectId}/tasks/${taskToDelete.id}`, {
         method: 'DELETE',
       });
-      setTasks(tasks.filter((t) => t.id !== taskId));
+      setTasks((prev) => prev.filter((t) => t.id !== taskToDelete.id));
+      setTaskToDelete(null);
     } catch (error) {
       console.error('Failed to delete task:', error);
+    } finally {
+      setIsDeletingTask(false);
     }
   }
 
   async function handleDeleteProject() {
-    if (!confirm('Are you sure you want to delete this project and all its tasks?')) return;
-
     try {
+      setIsDeletingProject(true);
       await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
       router.push('/projects');
     } catch (error) {
       console.error('Failed to delete project:', error);
+    } finally {
+      setIsDeletingProject(false);
+      setIsDeleteProjectModalOpen(false);
+    }
+  }
+
+  async function handleUpdateProjectName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!project) return;
+
+    const trimmedName = projectName.trim();
+    if (!trimmedName) {
+      setProjectSaveError('Project name is required.');
+      return;
+    }
+
+    if (trimmedName === project.name) return;
+
+    try {
+      setIsSavingProject(true);
+      setProjectSaveError(null);
+
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmedName }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update project');
+      }
+
+      const updated = await res.json();
+      setProject(updated);
+      setProjectName(updated.name);
+    } catch (error) {
+      console.error('Failed to update project:', error);
+      setProjectSaveError('Could not update the project name.');
+    } finally {
+      setIsSavingProject(false);
     }
   }
 
@@ -433,7 +504,7 @@ export default function ProjectKanbanPage({ params }: Props) {
                         task={task}
                         developer={developers.find((d) => d.id === task.assignedDeveloperId)}
                         onEdit={() => openEditTaskModal(task)}
-                        onDelete={() => handleDeleteTask(task.id)}
+                        onDelete={() => handleDeleteTask(task)}
                       />
                     ))}
                   </SortableContext>
@@ -515,6 +586,49 @@ export default function ProjectKanbanPage({ params }: Props) {
         </form>
       </Modal>
 
+      {/* Delete Task Modal */}
+      <Modal
+        isOpen={!!taskToDelete}
+        onClose={() => {
+          if (!isDeletingTask) setTaskToDelete(null);
+        }}
+        title="Delete Task"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              This action can’t be undone.
+            </p>
+            {taskToDelete && (
+              <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">
+                {taskToDelete.title}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setTaskToDelete(null)}
+              disabled={isDeletingTask}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              className="flex-1"
+              onClick={confirmDeleteTask}
+              disabled={isDeletingTask}
+            >
+              {isDeletingTask ? 'Deleting...' : 'Delete Task'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Project Settings Modal */}
       <Modal
         isOpen={isSettingsModalOpen}
@@ -524,17 +638,81 @@ export default function ProjectKanbanPage({ params }: Props) {
         <div className="space-y-4">
           <div>
             <h3 className="text-sm font-medium text-[var(--text-primary)] mb-2">Project Info</h3>
-            <p className="text-sm text-[var(--text-secondary)]">{project.name}</p>
-            {project.description && (
-              <p className="text-sm text-[var(--text-muted)] mt-1">{project.description}</p>
-            )}
+            <form onSubmit={handleUpdateProjectName} className="space-y-3">
+              <Input
+                label="Project Name"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                error={projectSaveError || undefined}
+                required
+              />
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={
+                    isSavingProject ||
+                    projectName.trim().length === 0 ||
+                    projectName.trim() === project.name
+                  }
+                >
+                  {isSavingProject ? 'Saving...' : 'Save Changes'}
+                </Button>
+                <span className="text-xs text-[var(--text-muted)]">
+                  Update the project name without changing the URL.
+                </span>
+              </div>
+            </form>
           </div>
 
           <div className="pt-4 border-t border-[var(--border-default)]">
             <h3 className="text-sm font-medium text-[var(--accent-danger)] mb-2">Danger Zone</h3>
-            <Button variant="danger" onClick={handleDeleteProject}>
+            <Button variant="danger" onClick={() => setIsDeleteProjectModalOpen(true)}>
               <Trash2 size={16} />
               Delete Project
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Project Modal */}
+      <Modal
+        isOpen={isDeleteProjectModalOpen}
+        onClose={() => {
+          if (!isDeletingProject) setIsDeleteProjectModalOpen(false);
+        }}
+        title="Delete Project"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-[var(--text-secondary)]">
+              This will permanently delete the project and all its tasks.
+            </p>
+            {project && (
+              <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">
+                {project.name}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setIsDeleteProjectModalOpen(false)}
+              disabled={isDeletingProject}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              className="flex-1"
+              onClick={handleDeleteProject}
+              disabled={isDeletingProject}
+            >
+              {isDeletingProject ? 'Deleting...' : 'Delete Project'}
             </Button>
           </div>
         </div>

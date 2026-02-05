@@ -33,21 +33,38 @@ export function TaskCard({ task, developer, isDragging, onEdit, onDelete }: Task
     transition,
   };
 
+  function handleOpen() {
+    if (isDragging || isSortableDragging) return;
+    onEdit?.();
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
+      role={onEdit ? 'button' : undefined}
+      tabIndex={onEdit ? 0 : undefined}
+      onClick={handleOpen}
+      onKeyDown={(event) => {
+        if (!onEdit) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleOpen();
+        }
+      }}
       className={cn(
         'group relative p-3 rounded-lg',
         'bg-[var(--bg-tertiary)] border border-[var(--border-default)]',
         'hover:border-[var(--border-strong)] transition-all',
-        (isDragging || isSortableDragging) && 'opacity-50 shadow-lg'
+        (isDragging || isSortableDragging) && 'opacity-50 shadow-lg',
+        onEdit && 'cursor-pointer'
       )}
     >
       {/* Drag handle */}
       <button
         {...attributes}
         {...listeners}
+        onClick={(event) => event.stopPropagation()}
         className="absolute left-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-secondary)] cursor-grab active:cursor-grabbing"
       >
         <GripVertical size={14} />
@@ -57,7 +74,10 @@ export function TaskCard({ task, developer, isDragging, onEdit, onDelete }: Task
       {(onEdit || onDelete) && (
         <div className="absolute right-2 top-2">
           <button
-            onClick={() => setShowMenu(!showMenu)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowMenu(!showMenu);
+            }}
             className="p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
           >
             <MoreHorizontal size={14} />
@@ -65,11 +85,24 @@ export function TaskCard({ task, developer, isDragging, onEdit, onDelete }: Task
 
           {showMenu && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 py-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-default)] shadow-lg z-20 min-w-[120px]">
+              <div
+                className="fixed inset-0 z-10"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowMenu(false);
+                }}
+              />
+              <div
+                className="absolute right-0 top-full mt-1 py-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-default)] shadow-lg z-20 min-w-[120px]"
+                onClick={(event) => event.stopPropagation()}
+              >
                 {onEdit && (
                   <button
-                    onClick={() => { setShowMenu(false); onEdit(); }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setShowMenu(false);
+                      onEdit?.();
+                    }}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
                   >
                     <Pencil size={14} />
@@ -78,7 +111,11 @@ export function TaskCard({ task, developer, isDragging, onEdit, onDelete }: Task
                 )}
                 {onDelete && (
                   <button
-                    onClick={() => { setShowMenu(false); onDelete(); }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setShowMenu(false);
+                      onDelete();
+                    }}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[var(--accent-danger)] hover:bg-[var(--bg-hover)]"
                   >
                     <Trash2 size={14} />
