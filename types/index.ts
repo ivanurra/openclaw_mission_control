@@ -142,6 +142,35 @@ export interface MemoryFavorites {
   dates: string[];
 }
 
+// Scheduled Tasks
+export type DayOfWeek =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday';
+
+export interface ScheduledTask {
+  id: string;
+  title: string;
+  description: string;
+  time: string;
+  dayOfWeek: DayOfWeek;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateScheduledTaskInput {
+  title: string;
+  description?: string;
+  time: string;
+  dayOfWeek: DayOfWeek;
+  color: string;
+}
+
 // UI Types
 export interface NavItem {
   label: string;

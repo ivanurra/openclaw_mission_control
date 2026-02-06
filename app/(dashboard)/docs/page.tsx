@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -13,6 +14,8 @@ import { cn } from '@/lib/utils/cn';
 import { formatDateTime } from '@/lib/utils/date';
 
 export default function DocsPage() {
+  const searchParams = useSearchParams();
+  const requestedDocId = searchParams.get('doc');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [folders, setFolders] = useState<FolderType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -90,7 +93,7 @@ export default function DocsPage() {
     }
   }
 
-  async function fetchDocument(docId: string) {
+  const fetchDocument = useCallback(async (docId: string) => {
     try {
       const res = await fetch(`/api/documents/${docId}`);
       if (!res.ok) return;
@@ -102,7 +105,7 @@ export default function DocsPage() {
     } catch (error) {
       console.error('Failed to fetch document:', error);
     }
-  }
+  }, []);
 
   useEffect(() => {
     if (!editor) return;
@@ -354,7 +357,7 @@ export default function DocsPage() {
     setHasChanges(true);
   }
 
-  async function selectDocument(doc: Document) {
+  const selectDocument = useCallback(async (doc: Document) => {
     if (doc.id === selectedDocId) return;
     if (hasChanges) {
       const confirmSwitch = confirm('You have unsaved changes. Switch documents anyway?');
@@ -363,7 +366,16 @@ export default function DocsPage() {
     setSelectedFolderId(doc.folderId ?? null);
     setSelectedDocId(doc.id);
     await fetchDocument(doc.id);
-  }
+  }, [fetchDocument, hasChanges, selectedDocId]);
+
+  useEffect(() => {
+    if (!requestedDocId || documents.length === 0) return;
+    if (selectedDocId === requestedDocId) return;
+    const doc = documents.find((item) => item.id === requestedDocId);
+    if (doc) {
+      selectDocument(doc);
+    }
+  }, [documents, requestedDocId, selectDocument, selectedDocId]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

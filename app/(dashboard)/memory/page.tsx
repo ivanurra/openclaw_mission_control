@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { MessageSquare, Search, Star, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button, Input, EmptyState } from '@/components/ui';
 import type { DayConversation, ConversationMessage } from '@/types';
@@ -8,6 +9,8 @@ import { cn } from '@/lib/utils/cn';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, getDay, addMonths, subMonths } from 'date-fns';
 
 export default function MemoryPage() {
+  const searchParams = useSearchParams();
+  const queryDate = searchParams.get('date');
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -18,17 +21,7 @@ export default function MemoryPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    if (selectedDate) {
-      fetchConversation(selectedDate);
-    }
-  }, [selectedDate]);
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       const [memoryRes, favoritesRes] = await Promise.all([
         fetch('/api/memory'),
@@ -41,18 +34,21 @@ export default function MemoryPage() {
       setAvailableDates(memoryData.dates || []);
       setFavorites(favoritesData.favorites || []);
 
-      // Select most recent date if available
-      if (memoryData.dates?.length > 0) {
-        setSelectedDate(memoryData.dates[0]);
-      }
+      const requestedDate =
+        queryDate && memoryData.dates?.includes(queryDate) ? queryDate : memoryData.dates?.[0];
+      if (requestedDate) setSelectedDate(requestedDate);
     } catch (error) {
       console.error('Failed to fetch memory data:', error);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [queryDate]);
 
-  async function fetchConversation(date: string) {
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const fetchConversation = useCallback(async (date: string) => {
     try {
       const res = await fetch(`/api/memory?date=${date}`);
       if (res.ok) {
@@ -62,7 +58,13 @@ export default function MemoryPage() {
     } catch (error) {
       console.error('Failed to fetch conversation:', error);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (selectedDate) {
+      fetchConversation(selectedDate);
+    }
+  }, [fetchConversation, selectedDate]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();

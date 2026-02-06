@@ -1,8 +1,14 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import DocsPage from '../../app/(dashboard)/docs/page';
 import { mockFetchSequence } from '../helpers/fetch-helpers';
+
+let searchParams = new URLSearchParams();
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => searchParams,
+}));
 
 describe('DocsPage', () => {
   it('renders documents and folders from API and opens a document', async () => {

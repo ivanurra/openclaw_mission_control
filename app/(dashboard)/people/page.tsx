@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Users, Trash2, Pencil } from 'lucide-react';
 import { Button, Modal, Input, Textarea, EmptyState, Avatar } from '@/components/ui';
 import type { Developer, CreateDeveloperInput } from '@/types';
@@ -8,6 +9,9 @@ import { cn } from '@/lib/utils/cn';
 import { DEVELOPER_COLORS } from '@/lib/constants/kanban';
 
 export default function PeoplePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const hasHandledQuery = useRef(false);
   const [developers, setDevelopers] = useState<Developer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,6 +26,7 @@ export default function PeoplePage() {
   useEffect(() => {
     fetchDevelopers();
   }, []);
+
 
   async function fetchDevelopers() {
     try {
@@ -74,7 +79,7 @@ export default function PeoplePage() {
     }
   }
 
-  function openEditModal(developer: Developer) {
+  const openEditModal = useCallback((developer: Developer) => {
     setEditingDeveloper(developer);
     setFormData({
       name: developer.name,
@@ -83,7 +88,7 @@ export default function PeoplePage() {
       color: developer.color,
     });
     setIsModalOpen(true);
-  }
+  }, []);
 
   function closeModal() {
     setIsModalOpen(false);
@@ -95,6 +100,19 @@ export default function PeoplePage() {
       color: DEVELOPER_COLORS[developers.length % DEVELOPER_COLORS.length],
     });
   }
+
+  useEffect(() => {
+    if (hasHandledQuery.current) return;
+    const developerId = searchParams.get('developer');
+    if (!developerId || developers.length === 0) return;
+
+    const developer = developers.find((dev) => dev.id === developerId);
+    if (developer) {
+      openEditModal(developer);
+      hasHandledQuery.current = true;
+      router.replace('/people');
+    }
+  }, [developers, openEditModal, router, searchParams]);
 
   if (isLoading) {
     return (
