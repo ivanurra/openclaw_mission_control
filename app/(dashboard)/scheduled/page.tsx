@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, Plus, Zap, CalendarClock, Calendar } from 'lucide-react';
+import { RefreshCw, Plus, Zap, CalendarClock, Calendar, Trash2 } from 'lucide-react';
 import { addDays, format, formatDistanceToNowStrict, getDay, startOfDay, startOfWeek } from 'date-fns';
 import { Button, Modal, Input, Textarea, Select, EmptyState } from '@/components/ui';
 import type { CreateScheduledTaskInput, DayOfWeek, ScheduledTask } from '@/types';
@@ -32,11 +32,13 @@ const COLOR_OPTIONS = [
 
 const ALWAYS_RUNNING = [
   {
-    title: 'mission control check',
+    title: 'endur check',
     interval: 'Every 30 min',
     color: '#60a5fa',
   },
 ];
+
+type ViewMode = 'week' | 'today';
 
 function getDayKeyFromDate(date: Date): DayOfWeek {
   const index = (getDay(date) + 6) % 7;
@@ -65,6 +67,11 @@ export default function ScheduledPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<ScheduledTask | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const todayColumnRef = useRef<HTMLDivElement | null>(null);
 
   const [formData, setFormData] = useState<CreateScheduledTaskInput>({
@@ -82,6 +89,15 @@ export default function ScheduledPage() {
       date: addDays(start, index),
     }));
   }, []);
+  const todayKey = getDayKeyFromDate(new Date());
+
+  const visibleDays = useMemo(() => {
+    if (viewMode === 'today') {
+      return currentWeek.filter((day) => day.key === todayKey);
+    }
+
+    return currentWeek;
+  }, [currentWeek, todayKey, viewMode]);
 
   const tasksByDay = useMemo(() => {
     const map: Record<DayOfWeek, ScheduledTask[]> = {
@@ -133,36 +149,113 @@ export default function ScheduledPage() {
     fetchTasks();
   }, [fetchTasks]);
 
-  async function handleCreateTask(event: React.FormEvent) {
+  function resetForm() {
+    setFormData({
+      title: '',
+      description: '',
+      time: '09:00',
+      dayOfWeek: 'monday',
+      color: COLOR_OPTIONS[0],
+    });
+  }
+
+  function openCreateTaskModal() {
+    setEditingTask(null);
+    resetForm();
+    setIsModalOpen(true);
+  }
+
+  function openEditTaskModal(task: ScheduledTask) {
+    setEditingTask(task);
+    setFormData({
+      title: task.title,
+      description: task.description,
+      time: task.time,
+      dayOfWeek: task.dayOfWeek,
+      color: task.color,
+    });
+    setIsModalOpen(true);
+  }
+
+  function closeTaskModal() {
+    setIsModalOpen(false);
+    setEditingTask(null);
+    resetForm();
+  }
+
+  async function handleSaveTask(event: React.FormEvent) {
     event.preventDefault();
     if (!formData.title.trim()) return;
 
     setIsSaving(true);
     try {
-      const res = await fetch('/api/scheduled', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      const created = await res.json();
-      setTasks((prev) => [...prev, created]);
-      setIsModalOpen(false);
-      setFormData({
-        title: '',
-        description: '',
-        time: '09:00',
-        dayOfWeek: 'monday',
-        color: COLOR_OPTIONS[0],
-      });
+      if (editingTask) {
+        const res = await fetch(`/api/scheduled/${editingTask.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+        if (!res.ok) throw new Error('Failed to update scheduled task');
+        const updated = await res.json();
+        setTasks((prev) => prev.map((task) => (task.id === updated.id ? updated : task)));
+      } else {
+        const res = await fetch('/api/scheduled', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+        if (!res.ok) throw new Error('Failed to create scheduled task');
+        const created = await res.json();
+        setTasks((prev) => [...prev, created]);
+      }
+
+      closeTaskModal();
     } catch (error) {
-      console.error('Failed to create scheduled task:', error);
+      console.error('Failed to save scheduled task:', error);
     } finally {
       setIsSaving(false);
     }
   }
 
+  function handleOpenDeleteTask() {
+    if (!editingTask) return;
+    setTaskToDelete(editingTask);
+    setIsModalOpen(false);
+    setIsDeleteModalOpen(true);
+  }
+
+  async function confirmDeleteTask() {
+    if (!taskToDelete) return;
+
+    setIsDeletingTask(true);
+    try {
+      const res = await fetch(`/api/scheduled/${taskToDelete.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete scheduled task');
+      setTasks((prev) => prev.filter((task) => task.id !== taskToDelete.id));
+      setTaskToDelete(null);
+      setIsDeleteModalOpen(false);
+      setEditingTask(null);
+      resetForm();
+    } catch (error) {
+      console.error('Failed to delete scheduled task:', error);
+    } finally {
+      setIsDeletingTask(false);
+    }
+  }
+
   function scrollToToday() {
-    todayColumnRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    todayColumnRef.current?.scrollIntoView?.({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+
+  function handleTodayView() {
+    setViewMode('today');
+    scrollToToday();
+  }
+
+  async function handleRefresh() {
+    await fetchTasks();
   }
 
   return (
@@ -171,33 +264,46 @@ export default function ScheduledPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Scheduled Tasks</h1>
           <p className="text-sm text-[var(--text-muted)] mt-1">
-            OpenClaw automated routines and recurring focus blocks.
+            Automated routines and recurring focus blocks.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-full border border-[var(--border-default)] bg-[var(--bg-secondary)] p-1">
             <button
               type="button"
-              className="px-3 py-1.5 text-xs font-semibold rounded-full bg-[var(--bg-elevated)] text-[var(--text-primary)]"
+              onClick={() => setViewMode('week')}
+              aria-pressed={viewMode === 'week'}
+              className={cn(
+                'px-3 py-1.5 text-xs font-semibold rounded-full transition-colors',
+                viewMode === 'week'
+                  ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              )}
             >
               Week
             </button>
             <button
               type="button"
-              onClick={scrollToToday}
-              className="px-3 py-1.5 text-xs font-semibold rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              onClick={handleTodayView}
+              aria-pressed={viewMode === 'today'}
+              className={cn(
+                'px-3 py-1.5 text-xs font-semibold rounded-full transition-colors',
+                viewMode === 'today'
+                  ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              )}
             >
               Today
             </button>
           </div>
           <button
-            onClick={fetchTasks}
+            onClick={handleRefresh}
             className="p-2 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
-            aria-label="Refresh"
+            aria-label="Refresh scheduled data"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={16} className={cn(isLoading && 'animate-spin')} />
           </button>
-          <Button onClick={() => setIsModalOpen(true)}>
+          <Button onClick={openCreateTaskModal}>
             <Plus size={18} />
             Add Task
           </Button>
@@ -228,17 +334,23 @@ export default function ScheduledPage() {
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
           <CalendarClock size={16} className="text-[var(--text-muted)]" />
-          Weekly Routine
+          {viewMode === 'week' ? 'Weekly Routine' : 'Today'}
         </div>
         <div className="overflow-x-auto">
-          <div className="min-w-[900px] grid grid-cols-7 gap-3">
-            {currentWeek.map((day) => {
-              const isToday = getDayKeyFromDate(new Date()) === day.key;
+          <div
+            className={cn(
+              'grid gap-3',
+              viewMode === 'week' ? 'min-w-[900px] grid-cols-7' : 'grid-cols-1'
+            )}
+          >
+            {visibleDays.map((day) => {
+              const isToday = todayKey === day.key;
               const dayTasks = tasksByDay[day.key];
               return (
                 <div
                   key={day.key}
                   ref={isToday ? todayColumnRef : undefined}
+                  data-testid="scheduled-day-card"
                   className={cn(
                     'rounded-2xl border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3 min-h-[240px] flex flex-col',
                     isToday && 'border-[var(--accent-primary)] shadow-[0_0_0_1px_rgba(99,102,241,0.35)]'
@@ -259,9 +371,12 @@ export default function ScheduledPage() {
                       <div className="text-xs text-[var(--text-muted)]">No tasks</div>
                     ) : (
                       dayTasks.map((task) => (
-                        <div
+                        <button
                           key={task.id}
-                          className="rounded-xl border px-3 py-2"
+                          type="button"
+                          onClick={() => openEditTaskModal(task)}
+                          aria-label={`Edit scheduled task ${task.title}`}
+                          className="w-full text-left rounded-xl border px-3 py-2 transition-all hover:brightness-110 hover:border-[var(--border-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                           style={{
                             borderColor: `${task.color}55`,
                             backgroundColor: `${task.color}1a`,
@@ -273,7 +388,7 @@ export default function ScheduledPage() {
                           <p className="text-xs text-[var(--text-muted)] mt-1">
                             {format(new Date(`1970-01-01T${task.time}:00`), 'h:mm a')}
                           </p>
-                        </div>
+                        </button>
                       ))
                     )}
                   </div>
@@ -300,7 +415,7 @@ export default function ScheduledPage() {
               title="No upcoming tasks"
               description="Create your first recurring task to see it here."
               action={
-                <Button onClick={() => setIsModalOpen(true)}>
+                <Button onClick={openCreateTaskModal}>
                   <Plus size={18} />
                   Add Task
                 </Button>
@@ -330,8 +445,12 @@ export default function ScheduledPage() {
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Recurring Task">
-        <form onSubmit={handleCreateTask} className="space-y-4">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeTaskModal}
+        title={editingTask ? 'Edit Recurring Task' : 'Add Recurring Task'}
+      >
+        <form onSubmit={handleSaveTask} className="space-y-4">
           <Input
             label="Title"
             placeholder="Task title"
@@ -382,19 +501,61 @@ export default function ScheduledPage() {
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsModalOpen(false)}
-              className="flex-1"
-            >
+            <Button type="button" variant="secondary" onClick={closeTaskModal} className="flex-1">
               Cancel
             </Button>
+            {editingTask && (
+              <Button type="button" variant="danger" onClick={handleOpenDeleteTask}>
+                <Trash2 size={16} />
+                Delete Task
+              </Button>
+            )}
             <Button type="submit" className="flex-1" disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Add Task'}
+              {isSaving ? 'Saving...' : editingTask ? 'Save Changes' : 'Add Task'}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setTaskToDelete(null);
+        }}
+        title="Delete Task"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Are you sure you want to delete
+            {' '}
+            <span className="text-[var(--text-primary)] font-medium">{taskToDelete?.title}</span>
+            ?
+          </p>
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setTaskToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              className="flex-1"
+              onClick={confirmDeleteTask}
+              disabled={isDeletingTask}
+            >
+              {isDeletingTask ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

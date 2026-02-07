@@ -7,13 +7,14 @@ import { cn } from '@/lib/utils/cn';
 import { Logo } from './logo';
 import { TaskSearch } from './task-search';
 import { GlobalSearch } from './global-search';
+import { MadridClock } from './madrid-clock';
 
 const navItems = [
   { label: 'Projects', href: '/projects', icon: LayoutGrid },
+  { label: 'Scheduled', href: '/scheduled', icon: CalendarClock },
   { label: 'Docs', href: '/docs', icon: FileText },
   { label: 'People', href: '/people', icon: Users },
   { label: 'Memory', href: '/memory', icon: MessageSquare },
-  { label: 'Scheduled', href: '/scheduled', icon: CalendarClock },
 ];
 
 export function Navbar() {
@@ -53,6 +54,7 @@ export function Navbar() {
         {/* Spacer */}
         <div className="flex-1" />
 
+        <MadridClock />
         <GlobalSearch />
         {showTaskSearch && <TaskSearch />}
       </div>
