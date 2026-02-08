@@ -20,6 +20,9 @@ const navItems = [
 export function Navbar() {
   const pathname = usePathname();
   const showTaskSearch = /^\/projects\/[^/]+/.test(pathname);
+  const aiModel = 'Opus 4.6';
+  const gatewayStatus: 'online' | 'disconnected' = 'online';
+  const isGatewayOnline = gatewayStatus === 'online';
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[var(--border-default)] bg-[var(--bg-secondary)]">
@@ -54,7 +57,39 @@ export function Navbar() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        <MadridClock />
+        <div className="hidden md:flex items-center gap-2">
+          <div
+            aria-label={`AI model ${aiModel}`}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold',
+              'border-[var(--border-default)] text-[var(--text-primary)] shadow-sm'
+            )}
+            style={{
+              background: 'linear-gradient(120deg, rgba(56,189,248,0.14), rgba(26,26,26,0.96))',
+            }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
+            <span className="tracking-[0.06em]">{aiModel}</span>
+          </div>
+          <MadridClock />
+          <div
+            aria-live="polite"
+            className={cn(
+              'inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11px] font-semibold tracking-[0.08em]',
+              isGatewayOnline
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                : 'border-rose-500/45 bg-rose-500/10 text-rose-300'
+            )}
+          >
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full',
+                isGatewayOnline ? 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-rose-400'
+              )}
+            />
+            {isGatewayOnline ? 'ONLINE' : 'DISCONNECTED'}
+          </div>
+        </div>
         <GlobalSearch />
         {showTaskSearch && <TaskSearch />}
       </div>

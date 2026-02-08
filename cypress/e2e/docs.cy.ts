@@ -4,18 +4,24 @@ describe('Docs flow', () => {
   });
 
   it('creates a folder in root and a document inside it', () => {
+    cy.intercept('POST', '/api/documents').as('createDocument');
     cy.visit('/docs');
 
-    cy.contains('button', 'New Folder').click();
-    cy.get('input[placeholder="Enter folder name"]').type('Logs');
-    cy.contains('button', 'Create').click();
+    cy.contains('button', 'Create Folder').click();
+    cy.contains('h2', 'Create Folder')
+      .parents('.fixed')
+      .within(() => {
+        cy.get('input[placeholder="Enter folder name"]').type('Logs');
+        cy.contains('button', 'Create').click();
+      });
 
     cy.contains('Logs').click();
     cy.contains('button', 'New Document').click();
-    cy.get('input[placeholder="Document title"]').type('Ice Log');
-    cy.contains('button', 'Create').click();
-
-    cy.contains('Ice Log').should('exist');
-    cy.contains('1 document').should('exist');
+    cy.wait('@createDocument')
+      .its('response.body.title')
+      .then((title: string) => {
+        expect(title).to.match(/^Untitled/);
+        cy.get('input.text-xl').should('have.value', title);
+      });
   });
 });

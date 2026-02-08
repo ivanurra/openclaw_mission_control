@@ -12,13 +12,17 @@ describe('MadridClock', () => {
     vi.useRealTimers();
   });
 
-  it('renders only the current date in English format', () => {
+  it('renders current Madrid date and HH:MM time without seconds', () => {
     render(<MadridClock />);
 
-    expect(screen.getByLabelText('Current date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Current date and time')).toBeInTheDocument();
     expect(screen.queryByText('Madrid')).not.toBeInTheDocument();
 
     const dateLabel = screen.getByTestId('madrid-clock-date');
+    const timeLabel = screen.getByTestId('madrid-clock-time');
+
     expect(dateLabel.textContent).toMatch(/Saturday,\s*07 February/i);
+    expect(timeLabel.textContent).toBe('11:15');
+    expect(timeLabel.textContent).toMatch(/^\d{2}:\d{2}$/);
   });
 });
