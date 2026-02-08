@@ -78,10 +78,40 @@ export async function updateFolder(id: string, updates: Partial<Folder>): Promis
 
   if (folderIndex === -1) return null;
 
-  index.folders[folderIndex] = { ...index.folders[folderIndex], ...updates };
+  const currentFolder = index.folders[folderIndex];
+  const nextParentId = updates.parentId === undefined ? currentFolder.parentId : updates.parentId;
+
+  if (nextParentId === id) return null;
+  if (nextParentId && !index.folders.some((folder) => folder.id === nextParentId)) return null;
+
+  const getDescendantIds = (folderId: string): string[] => {
+    const children = index.folders.filter((folder) => folder.parentId === folderId);
+    return children.flatMap((child) => [child.id, ...getDescendantIds(child.id)]);
+  };
+
+  if (nextParentId && getDescendantIds(id).includes(nextParentId)) return null;
+
+  const normalizedUpdates = { ...updates };
+  if (updates.name !== undefined) {
+    normalizedUpdates.slug = slugify(updates.name);
+  }
+  if (updates.parentId !== undefined && updates.order === undefined && updates.parentId !== currentFolder.parentId) {
+    normalizedUpdates.order = index.folders.filter((folder) => folder.parentId === updates.parentId).length;
+  }
+
+  index.folders[folderIndex] = { ...currentFolder, ...normalizedUpdates };
+  const updatedFolder = index.folders[folderIndex];
+  if (updatedFolder.parentId === null) {
+    if (!index.rootFolderIds.includes(updatedFolder.id)) {
+      index.rootFolderIds.push(updatedFolder.id);
+    }
+  } else {
+    index.rootFolderIds = index.rootFolderIds.filter((folderId) => folderId !== updatedFolder.id);
+  }
+
   await saveFolderIndex(index);
 
-  return index.folders[folderIndex];
+  return updatedFolder;
 }
 
 export async function deleteFolder(id: string): Promise<boolean> {
@@ -96,7 +126,7 @@ export async function deleteFolder(id: string): Promise<boolean> {
   const idsToDelete = getDescendantIds(id);
 
   index.folders = index.folders.filter(f => !idsToDelete.includes(f.id));
-  index.rootFolderIds = index.rootFolderIds.filter(fid => fid !== id);
+  index.rootFolderIds = index.rootFolderIds.filter(fid => !idsToDelete.includes(fid));
 
   await saveFolderIndex(index);
 

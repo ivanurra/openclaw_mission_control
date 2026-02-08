@@ -47,4 +47,31 @@ describe('documents-storage', () => {
       expect(documents.find(d => d.id === doc.id)).toBeUndefined();
     });
   });
+
+  it('moves folders across levels while preventing invalid nesting', async () => {
+    await withStorage(async () => {
+      const storage = await import('../../lib/storage/documents-storage');
+
+      const root = await storage.createFolder({ name: 'Root' });
+      const child = await storage.createFolder({ name: 'Child', parentId: root.id });
+
+      const invalid = await storage.updateFolder(root.id, { parentId: child.id });
+      expect(invalid).toBeNull();
+
+      const moved = await storage.updateFolder(child.id, { parentId: null });
+      expect(moved?.parentId).toBeNull();
+    });
+  });
+
+  it('updates folder slug when renaming a folder', async () => {
+    await withStorage(async () => {
+      const storage = await import('../../lib/storage/documents-storage');
+
+      const folder = await storage.createFolder({ name: 'Design Notes' });
+      const updated = await storage.updateFolder(folder.id, { name: 'UI Specs' });
+
+      expect(updated?.name).toBe('UI Specs');
+      expect(updated?.slug).toBe('ui-specs');
+    });
+  });
 });

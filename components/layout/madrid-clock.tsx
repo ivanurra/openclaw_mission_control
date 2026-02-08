@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const MADRID_TIMEZONE = 'Europe/Madrid';
 
@@ -12,8 +12,13 @@ const dateFormatter = new Intl.DateTimeFormat('en-GB', {
 });
 
 export function MadridClock() {
-  const now = new Date();
-  const dateLabel = useMemo(() => dateFormatter.format(now), [now]);
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+  }, []);
+
+  const dateLabel = useMemo(() => (now ? dateFormatter.format(now) : ''), [now]);
 
   return (
     <div
@@ -24,7 +29,7 @@ export function MadridClock() {
       }}
     >
       <time
-        dateTime={now.toISOString()}
+        dateTime={now ? now.toISOString() : ''}
         className="text-xs font-semibold text-[var(--text-primary)]"
         data-testid="madrid-clock-date"
       >

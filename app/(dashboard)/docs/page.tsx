@@ -7,11 +7,30 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
-import { Plus, FileText, Folder, ChevronRight, ChevronDown, Trash2, Pencil, Search, X } from 'lucide-react';
+import {
+  FolderPlus,
+  FilePlus2,
+  Upload,
+  FileText,
+  Folder,
+  ChevronRight,
+  ChevronDown,
+  Trash2,
+  Pencil,
+  Search,
+  X,
+  FileDown,
+  Check,
+  AlertCircle,
+} from 'lucide-react';
 import { Button, Modal, Input, EmptyState, Select, Badge } from '@/components/ui';
 import type { Document, Folder as FolderType, CreateFolderInput } from '@/types';
 import { cn } from '@/lib/utils/cn';
 import { formatDateTime } from '@/lib/utils/date';
+
+type DragEntity =
+  | { type: 'doc'; id: string }
+  | { type: 'folder'; id: string };
 
 export default function DocsPage() {
   const searchParams = useSearchParams();
@@ -28,12 +47,25 @@ export default function DocsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [docSearchQuery, setDocSearchQuery] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [isMovingItem, setIsMovingItem] = useState(false);
+  const [dragEntity, setDragEntity] = useState<DragEntity | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [uiNotice, setUiNotice] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const isSyncingRef = useRef(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     type: 'doc' | 'folder';
     id: string;
     name: string;
   } | null>(null);
+  const [renameFolderTarget, setRenameFolderTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renamedFolderName, setRenamedFolderName] = useState('');
+  const [isRenamingFolder, setIsRenamingFolder] = useState(false);
 
   // Modal states
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -46,6 +78,94 @@ export default function DocsPage() {
     emDelimiter: '*',
     strongDelimiter: '**',
   }), []);
+
+  const showNotice = useCallback((type: 'success' | 'error', message: string) => {
+    setUiNotice({ type, message });
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    noticeTimerRef.current = window.setTimeout(() => {
+      setUiNotice(null);
+      noticeTimerRef.current = null;
+    }, 3600);
+  }, []);
+
+  function inferTitleFromMarkdown(fileName: string, content: string): string {
+    const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/);
+    if (frontmatterMatch) {
+      const titleMatch = frontmatterMatch[1].match(/^title:\s*(.+)$/im);
+      if (titleMatch && titleMatch[1]) {
+        const frontmatterTitle = titleMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        if (frontmatterTitle) return frontmatterTitle;
+      }
+    }
+
+    const headingMatch = content.match(/^\s*#\s+(.+?)\s*$/m);
+    if (headingMatch && headingMatch[1]) {
+      const headingTitle = headingMatch[1].trim();
+      if (headingTitle) return headingTitle;
+    }
+
+    const fileBasedTitle = fileName
+      .replace(/\.md$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .trim();
+
+    return fileBasedTitle || 'Imported Document';
+  }
+
+  function readFileAsText(file: File): Promise<string> {
+    if (typeof file.text === 'function') {
+      return file.text();
+    }
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(new Error('Failed to read file.'));
+      reader.readAsText(file);
+    });
+  }
+
+  function toMarkdownFileName(title: string): string {
+    const slug = title
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return `${slug || 'document'}.md`;
+  }
+
+  const createUniqueDocumentTitle = useCallback(
+    (
+      baseTitle: string,
+      folderId: string | null,
+      existingDocuments: Array<Pick<Document, 'title' | 'folderId'>> = documents
+    ): string => {
+      const cleanBase = baseTitle.trim() || 'Untitled';
+      const normalize = (value: string) => value.trim().toLowerCase();
+      const siblingTitles = new Set(
+        existingDocuments
+          .filter((doc) => doc.folderId === folderId)
+          .map((doc) => normalize(doc.title))
+      );
+
+      if (!siblingTitles.has(normalize(cleanBase))) {
+        return cleanBase;
+      }
+
+      let counter = 2;
+      let candidate = `${cleanBase} (${counter})`;
+      while (siblingTitles.has(normalize(candidate))) {
+        counter += 1;
+        candidate = `${cleanBase} (${counter})`;
+      }
+
+      return candidate;
+    },
+    [documents]
+  );
 
   const editor = useEditor({
     extensions: [
@@ -72,6 +192,12 @@ export default function DocsPage() {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => () => {
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
   }, []);
 
   async function fetchData() {
@@ -123,14 +249,7 @@ export default function DocsPage() {
 
   async function handleCreateDocumentInline() {
     try {
-      const siblings = documents.filter((doc) => doc.folderId === selectedFolderId);
-      const baseTitle = 'Untitled';
-      let title = baseTitle;
-      let counter = 1;
-      while (siblings.some((doc) => doc.title === title)) {
-        counter += 1;
-        title = `${baseTitle} ${counter}`;
-      }
+      const title = createUniqueDocumentTitle('Untitled', selectedFolderId);
       const res = await fetch('/api/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -140,12 +259,123 @@ export default function DocsPage() {
           folderId: selectedFolderId,
         }),
       });
+      if (!res.ok) {
+        throw new Error('Failed to create document');
+      }
       const newDoc = await res.json();
-      setDocuments([newDoc, ...documents]);
+      setDocuments((prev) => [newDoc, ...prev]);
       setSelectedDocId(newDoc.id);
       fetchDocument(newDoc.id);
     } catch (error) {
       console.error('Failed to create document:', error);
+      showNotice('error', 'Could not create a new document.');
+    }
+  }
+
+  async function handleImportMarkdownFiles(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (files.length === 0) return;
+
+    if (hasChanges) {
+      const canImport = confirm('You have unsaved changes. Import and open the new document anyway?');
+      if (!canImport) return;
+    }
+
+    const targetFolderId = selectedFolderId ?? activeDocument?.folderId ?? null;
+    const existingDocs: Array<Pick<Document, 'title' | 'folderId'>> = documents.map((doc) => ({
+      title: doc.title,
+      folderId: doc.folderId,
+    }));
+    const importedDocuments: Document[] = [];
+    let skippedFiles = 0;
+
+    setIsImporting(true);
+    try {
+      for (const file of files) {
+        if (!file.name.toLowerCase().endsWith('.md')) {
+          skippedFiles += 1;
+          continue;
+        }
+
+        const content = await readFileAsText(file);
+        const baseTitle = inferTitleFromMarkdown(file.name, content);
+        const title = createUniqueDocumentTitle(baseTitle, targetFolderId, existingDocs);
+        existingDocs.push({ title, folderId: targetFolderId });
+
+        const res = await fetch('/api/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            content,
+            folderId: targetFolderId,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to import ${file.name}`);
+        }
+
+        const importedDoc: Document = await res.json();
+        importedDocuments.push(importedDoc);
+      }
+
+      if (importedDocuments.length > 0) {
+        setDocuments((prev) => [...[...importedDocuments].reverse(), ...prev]);
+        const openedDocument = importedDocuments[importedDocuments.length - 1];
+        if (openedDocument.folderId) {
+          setExpandedFolders((prev) => {
+            const next = new Set(prev);
+            next.add(openedDocument.folderId);
+            return next;
+          });
+        }
+        setSelectedDocId(openedDocument.id);
+        setSelectedFolderId(openedDocument.folderId ?? null);
+        await fetchDocument(openedDocument.id);
+      }
+
+      if (importedDocuments.length > 0 && skippedFiles === 0) {
+        showNotice(
+          'success',
+          importedDocuments.length === 1
+            ? 'Markdown file imported successfully.'
+            : `${importedDocuments.length} Markdown files imported successfully.`
+        );
+      } else if (importedDocuments.length > 0 && skippedFiles > 0) {
+        showNotice('success', `${importedDocuments.length} imported, ${skippedFiles} skipped (only .md allowed).`);
+      } else {
+        showNotice('error', 'Only .md files can be imported.');
+      }
+    } catch (error) {
+      console.error('Failed to import markdown files:', error);
+      showNotice('error', 'Could not import Markdown files. Please try again.');
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  function handleExportMarkdown() {
+    if (!activeDocument) return;
+
+    try {
+      const markdownContent = editedContent || '';
+      const fileName = toMarkdownFileName(editedTitle || activeDocument.title);
+      const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showNotice('success', `Exported as ${fileName}.`);
+    } catch (error) {
+      console.error('Failed to export markdown file:', error);
+      showNotice('error', 'Could not export this document.');
     }
   }
 
@@ -168,6 +398,41 @@ export default function DocsPage() {
       setFolderForm({ name: '', parentId: null });
     } catch (error) {
       console.error('Failed to create folder:', error);
+    }
+  }
+
+  async function handleRenameFolder(e: React.FormEvent) {
+    e.preventDefault();
+    if (!renameFolderTarget || isRenamingFolder) return;
+
+    const nextName = renamedFolderName.trim();
+    if (!nextName) return;
+    if (nextName === renameFolderTarget.name) {
+      setRenameFolderTarget(null);
+      setRenamedFolderName('');
+      return;
+    }
+
+    setIsRenamingFolder(true);
+    try {
+      const res = await fetch(`/api/folders/${renameFolderTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nextName }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to rename folder');
+      }
+      const updatedFolder: FolderType = await res.json();
+      setFolders((prev) => prev.map((folder) => (folder.id === updatedFolder.id ? updatedFolder : folder)));
+      setRenameFolderTarget(null);
+      setRenamedFolderName('');
+      showNotice('success', `Folder renamed to "${updatedFolder.name}".`);
+    } catch (error) {
+      console.error('Failed to rename folder:', error);
+      showNotice('error', 'Could not rename this folder.');
+    } finally {
+      setIsRenamingFolder(false);
     }
   }
 
@@ -209,7 +474,9 @@ export default function DocsPage() {
   }
 
   function getChildFolders(parentId: string | null): FolderType[] {
-    return folders.filter((f) => f.parentId === parentId).sort((a, b) => a.order - b.order);
+    return folders
+      .filter((f) => f.parentId === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   }
 
   function getDocumentsInFolder(folderId: string | null): Document[] {
@@ -227,6 +494,117 @@ export default function DocsPage() {
       currentId = folder.parentId;
     }
     return parts.length > 0 ? parts.join(' / ') : 'All Documents';
+  }
+
+  function getDescendantFolderIds(folderId: string): string[] {
+    const children = folders.filter((folder) => folder.parentId === folderId);
+    return children.flatMap((child) => [child.id, ...getDescendantFolderIds(child.id)]);
+  }
+
+  function canDropIntoFolder(targetFolderId: string | null): boolean {
+    if (!dragEntity) return false;
+
+    if (dragEntity.type === 'doc') {
+      const draggedDoc = documents.find((doc) => doc.id === dragEntity.id);
+      if (!draggedDoc) return false;
+      return draggedDoc.folderId !== targetFolderId;
+    }
+
+    const draggedFolder = folderMap.get(dragEntity.id);
+    if (!draggedFolder) return false;
+
+    if (draggedFolder.id === targetFolderId) return false;
+    if (targetFolderId && getDescendantFolderIds(draggedFolder.id).includes(targetFolderId)) return false;
+
+    return draggedFolder.parentId !== targetFolderId;
+  }
+
+  function clearDragState() {
+    setDragEntity(null);
+    setDragOverFolderId(null);
+  }
+
+  function handleItemDragStart(event: React.DragEvent, entity: DragEntity) {
+    setDragEntity(entity);
+    setDragOverFolderId(null);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', `${entity.type}:${entity.id}`);
+  }
+
+  function handleDropZoneDragOver(event: React.DragEvent, targetFolderId: string | null) {
+    if (!dragEntity || !canDropIntoFolder(targetFolderId)) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOverFolderId(targetFolderId);
+  }
+
+  async function moveEntityToFolder(targetFolderId: string | null) {
+    if (!dragEntity || !canDropIntoFolder(targetFolderId) || isMovingItem) return;
+
+    setIsMovingItem(true);
+    try {
+      if (dragEntity.type === 'doc') {
+        const res = await fetch(`/api/documents/${dragEntity.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderId: targetFolderId }),
+        });
+        if (!res.ok) {
+          throw new Error('Failed to move document');
+        }
+        const updatedDoc: Document = await res.json();
+        setDocuments((prev) => prev.map((doc) => (doc.id === updatedDoc.id ? updatedDoc : doc)));
+        if (selectedDocId === updatedDoc.id) {
+          setSelectedFolderId(updatedDoc.folderId);
+          setActiveDocument((prev) => (prev && prev.id === updatedDoc.id ? updatedDoc : prev));
+        }
+        if (updatedDoc.folderId) {
+          setExpandedFolders((prev) => new Set(prev).add(updatedDoc.folderId));
+        }
+        showNotice('success', `Moved "${updatedDoc.title}" successfully.`);
+        return;
+      }
+
+      const draggedFolder = folderMap.get(dragEntity.id);
+      if (!draggedFolder) return;
+
+      const siblingCount = folders.filter(
+        (folder) => folder.parentId === targetFolderId && folder.id !== draggedFolder.id
+      ).length;
+
+      const res = await fetch(`/api/folders/${draggedFolder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parentId: targetFolderId,
+          order: siblingCount,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to move folder');
+      }
+
+      const updatedFolder: FolderType = await res.json();
+      setFolders((prev) => prev.map((folder) => (folder.id === updatedFolder.id ? updatedFolder : folder)));
+      if (updatedFolder.parentId) {
+        setExpandedFolders((prev) => new Set(prev).add(updatedFolder.parentId));
+      }
+      showNotice('success', `Moved folder "${updatedFolder.name}" successfully.`);
+    } catch (error) {
+      console.error('Failed to move item:', error);
+      showNotice('error', 'Could not move this item.');
+    } finally {
+      setIsMovingItem(false);
+    }
+  }
+
+  async function handleDropZoneDrop(event: React.DragEvent, targetFolderId: string | null) {
+    event.preventDefault();
+    event.stopPropagation();
+    await moveEntityToFolder(targetFolderId);
+    clearDragState();
   }
 
   const docSearchResults = useMemo(() => {
@@ -253,19 +631,26 @@ export default function DocsPage() {
       const isSelected = selectedFolderId === folder.id;
       const hasChildren = getChildFolders(folder.id).length > 0 || getDocumentsInFolder(folder.id).length > 0;
       const docCount = getDocumentsInFolder(folder.id).length;
+      const isDragOver = dragOverFolderId === folder.id && canDropIntoFolder(folder.id);
 
       return (
         <div key={folder.id}>
           <div
             className={cn(
               'group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors',
-              isSelected ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-elevated)]'
+              isSelected ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-elevated)]',
+              isDragOver && 'bg-[var(--accent-primary)]/15 ring-1 ring-[var(--accent-primary)]'
             )}
             style={{ paddingLeft: `${8 + level * 16}px` }}
             onClick={() => {
               setSelectedFolderId(folder.id);
               if (hasChildren) toggleFolder(folder.id);
             }}
+            draggable
+            onDragStart={(event) => handleItemDragStart(event, { type: 'folder', id: folder.id })}
+            onDragEnd={clearDragState}
+            onDragOver={(event) => handleDropZoneDragOver(event, folder.id)}
+            onDrop={(event) => void handleDropZoneDrop(event, folder.id)}
           >
             <button
               onClick={(e) => { e.stopPropagation(); toggleFolder(folder.id); }}
@@ -275,17 +660,30 @@ export default function DocsPage() {
             </button>
             <Folder size={16} className="text-[var(--text-muted)]" />
             <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{folder.name}</span>
-            <Badge className="text-[10px]">{docCount}</Badge>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name });
-              }}
-              aria-label="Delete folder"
-              className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)]"
-            >
-              <Trash2 size={12} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRenameFolderTarget({ id: folder.id, name: folder.name });
+                  setRenamedFolderName(folder.name);
+                }}
+                aria-label="Rename folder"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteTarget({ type: 'folder', id: folder.id, name: folder.name });
+                }}
+                aria-label="Delete folder"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)]"
+              >
+                <Trash2 size={12} />
+              </button>
+              <Badge className="text-[10px]">{docCount}</Badge>
+            </div>
           </div>
           {isExpanded && (
             <div>
@@ -311,6 +709,9 @@ export default function DocsPage() {
           )}
           style={{ paddingLeft: `${8 + level * 16}px` }}
           onClick={() => selectDocument(doc)}
+          draggable
+          onDragStart={(event) => handleItemDragStart(event, { type: 'doc', id: doc.id })}
+          onDragEnd={clearDragState}
         >
           <FileText size={14} className="text-[var(--text-muted)]" />
           <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{doc.title}</span>
@@ -411,29 +812,19 @@ export default function DocsPage() {
         <div className="p-4 border-b border-[var(--border-default)]">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Documents</h2>
         </div>
-        <div className="flex-1 p-2 overflow-y-auto">
-          {/* Root level */}
-          <button
-            onClick={() => setSelectedFolderId(null)}
-            className={cn(
-              'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-left',
-              selectedFolderId === null ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-elevated)]'
-            )}
-          >
-            <FileText size={16} className="text-[var(--text-muted)]" />
-            <span className="text-sm text-[var(--text-primary)]">All Documents</span>
-          </button>
-
-          <div className="mt-1">
-            {renderDocumentItems(null, 1)}
-          </div>
-
-          <div className="mt-2">
-            {renderFolderTree(null)}
-          </div>
-        </div>
-        <div className="p-2 border-t border-[var(--border-default)]">
-          <div className="mb-3">
+        <div className="px-3 py-3 border-b border-[var(--border-default)] space-y-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".md,text/markdown"
+            multiple
+            className="hidden"
+            onChange={handleImportMarkdownFiles}
+            data-testid="markdown-import-input"
+            aria-label="Import markdown files"
+          />
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Search</p>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
@@ -460,68 +851,127 @@ export default function DocsPage() {
                 </button>
               )}
             </div>
-
-            {docSearchQuery && (
-              <div
-                className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)]"
-                data-testid="doc-search-results"
-              >
-                {docSearchResults.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
-                    No documents found.
-                  </div>
-                ) : (
-                  docSearchResults.map((doc) => (
-                    <button
-                      key={doc.id}
-                      type="button"
-                      onClick={() => {
-                        selectDocument(doc);
-                        setDocSearchQuery('');
-                      }}
-                      className="w-full text-left px-3 py-2 border-b border-[var(--border-default)] last:border-b-0 hover:bg-[var(--bg-elevated)] transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText size={12} className="text-[var(--text-muted)]" />
-                        <span className="text-sm text-[var(--text-primary)] truncate">{doc.title}</span>
-                      </div>
-                      <span className="text-xs text-[var(--text-muted)] truncate">
-                        {getFolderPath(doc.folderId)}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
           </div>
-          <div className="flex gap-2">
+          <div className="space-y-1">
             <Button
               variant="ghost"
               size="sm"
-              className="flex-1 justify-start"
+              className="w-full justify-start"
               onClick={() => {
                 setFolderForm({ name: '', parentId: null });
                 setIsFolderModalOpen(true);
               }}
             >
-              <Plus size={16} />
-              New Folder
+              <FolderPlus size={16} />
+              Create Folder
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              className="flex-1 justify-start"
+              className="w-full justify-start"
               onClick={handleCreateDocumentInline}
             >
-              <Plus size={16} />
-              New Doc
+              <FilePlus2 size={16} />
+              New Document
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => importInputRef.current?.click()}
+              disabled={isImporting}
+            >
+              <Upload size={16} />
+              {isImporting ? 'Importing Markdown...' : 'Import Markdown'}
+            </Button>
+          </div>
+          {docSearchQuery && (
+            <div
+              className="max-h-40 overflow-y-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)]"
+              data-testid="doc-search-results"
+            >
+              {docSearchResults.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                  No documents found.
+                </div>
+              ) : (
+                docSearchResults.map((doc) => (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onClick={() => {
+                      selectDocument(doc);
+                      setDocSearchQuery('');
+                    }}
+                    className="w-full text-left px-3 py-2 border-b border-[var(--border-default)] last:border-b-0 hover:bg-[var(--bg-elevated)] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText size={12} className="text-[var(--text-muted)]" />
+                      <span className="text-sm text-[var(--text-primary)] truncate">{doc.title}</span>
+                    </div>
+                    <span className="text-xs text-[var(--text-muted)] truncate">
+                      {getFolderPath(doc.folderId)}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 p-2 overflow-y-auto">
+          {/* Root level */}
+          <button
+            onClick={() => setSelectedFolderId(null)}
+            className={cn(
+              'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-left',
+              selectedFolderId === null ? 'bg-[var(--bg-elevated)]' : 'hover:bg-[var(--bg-elevated)]',
+              dragOverFolderId === null && canDropIntoFolder(null) && 'bg-[var(--accent-primary)]/15 ring-1 ring-[var(--accent-primary)]'
+            )}
+            onDragOver={(event) => handleDropZoneDragOver(event, null)}
+            onDrop={(event) => void handleDropZoneDrop(event, null)}
+          >
+            <FileText size={16} className="text-[var(--text-muted)]" />
+            <span className="text-sm text-[var(--text-primary)]">All Documents</span>
+          </button>
+
+          <div className="mt-1">
+            {renderFolderTree(null)}
+          </div>
+
+          <div className="mt-2">
+            {renderDocumentItems(null, 1)}
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {uiNotice && (
+          <div className="px-6 pt-3">
+            <div
+              role="status"
+              className={cn(
+                'flex items-center justify-between rounded-xl border px-3 py-2 text-sm',
+                uiNotice.type === 'success'
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-red-500/30 bg-red-500/10 text-red-300'
+              )}
+            >
+              <span className="flex items-center gap-2">
+                {uiNotice.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />}
+                {uiNotice.message}
+              </span>
+              <button
+                type="button"
+                aria-label="Dismiss notice"
+                className="rounded p-1 opacity-80 hover:opacity-100"
+                onClick={() => setUiNotice(null)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
         {!activeDocument ? (
           <div className="flex-1 p-8 overflow-y-auto">
             <EmptyState
@@ -552,6 +1002,20 @@ export default function DocsPage() {
                 <span className="text-xs text-[var(--text-muted)] mr-2">
                   {isSaving ? 'Saving...' : `Last saved ${formatDateTime(activeDocument.updatedAt)}`}
                 </span>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleExportMarkdown}
+                  className={cn(
+                    'border-[var(--accent-primary)]/30 bg-[var(--accent-primary)]/8',
+                    'text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/16 hover:text-[var(--accent-primary)]'
+                  )}
+                >
+                  <FileDown size={16} />
+                  Export .md
+                </Button>
 
                 <button
                   onClick={() => setDeleteTarget({ type: 'doc', id: activeDocument.id, name: activeDocument.title })}
@@ -602,6 +1066,49 @@ export default function DocsPage() {
             </Button>
             <Button type="submit" className="flex-1">
               Create
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Rename Folder Modal */}
+      <Modal
+        isOpen={!!renameFolderTarget}
+        onClose={() => {
+          if (isRenamingFolder) return;
+          setRenameFolderTarget(null);
+          setRenamedFolderName('');
+        }}
+        title="Rename Folder"
+      >
+        <form onSubmit={handleRenameFolder} className="space-y-4">
+          <Input
+            label="Folder Name"
+            value={renamedFolderName}
+            onChange={(e) => setRenamedFolderName(e.target.value)}
+            placeholder="Enter folder name"
+            autoFocus
+            required
+          />
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setRenameFolderTarget(null);
+                setRenamedFolderName('');
+              }}
+              className="flex-1"
+              disabled={isRenamingFolder}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={isRenamingFolder || !renamedFolderName.trim()}
+            >
+              {isRenamingFolder ? 'Saving...' : 'Save'}
             </Button>
           </div>
         </form>
