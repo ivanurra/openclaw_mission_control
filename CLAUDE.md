@@ -17,7 +17,7 @@ Endur is a local-first productivity app built with Next.js 16 (App Router), Type
 
 1. **Projects** - Kanban board with drag-and-drop (dnd-kit)
 2. **Docs** - Markdown editor with folder hierarchy
-3. **Memory** - Read-only ClowdBot conversation viewer
+3. **Memory** - Read-only bot conversation viewer
 
 ### Data Flow
 

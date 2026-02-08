@@ -35,15 +35,15 @@ describe('PeoplePage', () => {
     expect(screen.getByText('Backend')).toBeInTheDocument();
   });
 
-  it('opens add developer modal', async () => {
+  it('opens add person modal', async () => {
     mockFetchSequence([[]]);
 
     render(<PeoplePage />);
 
     expect(await screen.findByText('People')).toBeInTheDocument();
     const user = userEvent.setup();
-    const buttons = screen.getAllByRole('button', { name: /add developer/i });
+    const buttons = screen.getAllByRole('button', { name: /add person/i });
     await user.click(buttons[0]);
-    expect(await screen.findByRole('heading', { name: 'Add Developer' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Add Person' })).toBeInTheDocument();
   });
 });

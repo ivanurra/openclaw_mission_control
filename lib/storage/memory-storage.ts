@@ -43,7 +43,7 @@ function parseConversationContent(content: string): ConversationMessage[] {
       const roleLower = roleText.toLowerCase().trim();
 
       let role: ConversationMessage['role'] = 'user';
-      if (roleLower.includes('assistant') || roleLower.includes('clowdbot') || roleLower.includes('bot')) {
+      if (roleLower.includes('assistant') || roleLower.includes('bot')) {
         role = 'assistant';
       } else if (roleLower.includes('system')) {
         role = 'system';

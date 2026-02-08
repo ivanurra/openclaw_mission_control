@@ -13,7 +13,7 @@ const navItems = [
   { label: 'Projects', href: '/projects', icon: LayoutGrid },
   { label: 'Scheduled', href: '/scheduled', icon: CalendarClock },
   { label: 'Docs', href: '/docs', icon: FileText },
-  { label: 'People', href: '/people', icon: Users },
+  { label: 'Crew', href: '/people', icon: Users },
   { label: 'Memory', href: '/memory', icon: MessageSquare },
 ];
 

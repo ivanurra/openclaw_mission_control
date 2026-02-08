@@ -137,7 +137,7 @@ Message body
 Response body
 ```
 
-Supported assistant role keywords include `assistant`, `bot`, and `clowdbot`.
+Supported assistant role keywords include `assistant` and `bot`.
 
 ## API Surface (High Level)
 

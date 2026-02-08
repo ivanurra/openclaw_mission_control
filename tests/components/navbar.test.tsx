@@ -47,6 +47,15 @@ describe('Navbar', () => {
     expect(screen.queryByText('DISCONNECTED')).not.toBeInTheDocument();
   });
 
+  it('uses Crew label in navigation instead of People', () => {
+    pathname = '/projects';
+    render(<Navbar />);
+
+    const nav = screen.getByRole('navigation');
+    expect(within(nav).getByRole('link', { name: /crew/i })).toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: /people/i })).not.toBeInTheDocument();
+  });
+
   it('orders model, Madrid clock, status, and search in the header', () => {
     pathname = '/projects';
     render(<Navbar />);

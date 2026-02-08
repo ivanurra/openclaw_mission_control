@@ -134,7 +134,7 @@ export default function PeoplePage() {
         </div>
         <Button onClick={() => setIsModalOpen(true)}>
           <Plus size={18} />
-          Add Developer
+          Add Person
         </Button>
       </div>
 
@@ -143,11 +143,11 @@ export default function PeoplePage() {
         <EmptyState
           icon={Users}
           title="No team members yet"
-          description="Add developers to assign them to projects and tasks"
+          description="Add people to assign them to projects and tasks"
           action={
             <Button onClick={() => setIsModalOpen(true)}>
               <Plus size={18} />
-              Add Developer
+              Add Person
             </Button>
           }
         />
@@ -200,11 +200,11 @@ export default function PeoplePage() {
         </div>
       )}
 
-      {/* Add/Edit Developer Modal */}
+      {/* Add/Edit Person Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
-        title={editingDeveloper ? 'Edit Developer' : 'Add Developer'}
+        title={editingDeveloper ? 'Edit Person' : 'Add Person'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
@@ -250,7 +250,7 @@ export default function PeoplePage() {
               Cancel
             </Button>
             <Button type="submit" className="flex-1">
-              {editingDeveloper ? 'Save Changes' : 'Add Developer'}
+              {editingDeveloper ? 'Save Changes' : 'Add Person'}
             </Button>
           </div>
         </form>

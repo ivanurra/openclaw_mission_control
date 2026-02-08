@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { MessageSquare, Search, Star, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button, Input, EmptyState } from '@/components/ui';
-import type { DayConversation, ConversationMessage } from '@/types';
+import { EmptyState } from '@/components/ui';
+import type { DayConversation } from '@/types';
 import { cn } from '@/lib/utils/cn';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, getDay, addMonths, subMonths } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isToday, getDay, addMonths, subMonths } from 'date-fns';
 
 export default function MemoryPage() {
   const searchParams = useSearchParams();
@@ -19,6 +19,7 @@ export default function MemoryPage() {
   const [searchResults, setSearchResults] = useState<Array<{ date: string; excerpt: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [isConversationLoading, setIsConversationLoading] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const fetchData = useCallback(async () => {
@@ -36,7 +37,7 @@ export default function MemoryPage() {
 
       const requestedDate =
         queryDate && memoryData.dates?.includes(queryDate) ? queryDate : memoryData.dates?.[0];
-      if (requestedDate) setSelectedDate(requestedDate);
+      setSelectedDate(requestedDate || null);
     } catch (error) {
       console.error('Failed to fetch memory data:', error);
     } finally {
@@ -49,20 +50,28 @@ export default function MemoryPage() {
   }, [fetchData]);
 
   const fetchConversation = useCallback(async (date: string) => {
+    setIsConversationLoading(true);
     try {
       const res = await fetch(`/api/memory?date=${date}`);
       if (res.ok) {
         const data = await res.json();
         setConversation(data);
+      } else {
+        setConversation({ date, messages: [] });
       }
     } catch (error) {
       console.error('Failed to fetch conversation:', error);
+      setConversation({ date, messages: [] });
+    } finally {
+      setIsConversationLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (selectedDate) {
       fetchConversation(selectedDate);
+    } else {
+      setConversation(null);
     }
   }, [fetchConversation, selectedDate]);
 
@@ -107,7 +116,6 @@ export default function MemoryPage() {
 
     return (
       <div className="p-4">
-        {/* Calendar header */}
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
@@ -126,7 +134,6 @@ export default function MemoryPage() {
           </button>
         </div>
 
-        {/* Day headers */}
         <div className="grid grid-cols-7 gap-1 mb-2">
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
             <div key={day} className="text-center text-xs text-[var(--text-muted)] py-1">
@@ -135,9 +142,7 @@ export default function MemoryPage() {
           ))}
         </div>
 
-        {/* Days grid */}
         <div className="grid grid-cols-7 gap-1">
-          {/* Empty cells for days before month start */}
           {Array.from({ length: startDay }).map((_, i) => (
             <div key={`empty-${i}`} className="h-8" />
           ))}
@@ -151,13 +156,12 @@ export default function MemoryPage() {
             return (
               <button
                 key={dateStr}
-                onClick={() => hasConversation && setSelectedDate(dateStr)}
-                disabled={!hasConversation}
+                onClick={() => setSelectedDate(dateStr)}
                 className={cn(
                   'h-8 rounded-lg text-sm relative transition-colors',
                   hasConversation
-                    ? 'cursor-pointer hover:bg-[var(--bg-elevated)]'
-                    : 'cursor-default text-[var(--text-muted)] opacity-50',
+                    ? 'text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]',
                   isSelected && 'bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]',
                   isToday(day) && !isSelected && 'ring-1 ring-[var(--accent-primary)]'
                 )}
@@ -187,14 +191,12 @@ export default function MemoryPage() {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Sidebar - Calendar & Search */}
       <div className="w-72 flex-shrink-0 border-r border-[var(--border-default)] bg-[var(--bg-secondary)] flex flex-col">
         <div className="p-4 border-b border-[var(--border-default)]">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Bot Memory</h2>
-          <p className="text-xs text-[var(--text-muted)] mt-1">ClowdBot conversations</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">OpenClaw conversations</p>
         </div>
 
-        {/* Search */}
         <form onSubmit={handleSearch} className="p-4 border-b border-[var(--border-default)]">
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -208,7 +210,6 @@ export default function MemoryPage() {
           </div>
         </form>
 
-        {/* Search Results or Calendar */}
         <div className="flex-1 overflow-y-auto">
           {searchResults.length > 0 ? (
             <div className="p-4">
@@ -246,7 +247,6 @@ export default function MemoryPage() {
           )}
         </div>
 
-        {/* Favorites */}
         {favorites.length > 0 && (
           <div className="p-4 border-t border-[var(--border-default)]">
             <h3 className="text-xs font-semibold text-[var(--text-muted)] mb-2 flex items-center gap-1">
@@ -273,11 +273,9 @@ export default function MemoryPage() {
         )}
       </div>
 
-      {/* Main Content - Conversation Viewer */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedDate && conversation ? (
+        {selectedDate ? (
           <>
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-default)]">
               <div className="flex items-center gap-3">
                 <Calendar size={20} className="text-[var(--text-muted)]" />
@@ -298,45 +296,54 @@ export default function MemoryPage() {
               </button>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-3xl mx-auto space-y-4">
-                {conversation.messages.map((message, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      'flex gap-3',
-                      message.role === 'user' && 'flex-row-reverse'
-                    )}
-                  >
+              {isConversationLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--accent-primary)]" />
+                </div>
+              ) : (conversation?.messages.length ?? 0) > 0 ? (
+                <div className="max-w-3xl mx-auto space-y-4">
+                  {conversation?.messages.map((message, i) => (
                     <div
+                      key={i}
                       className={cn(
-                        'max-w-[80%] rounded-xl px-4 py-3',
-                        message.role === 'user'
-                          ? 'bg-[var(--accent-primary)] text-white'
-                          : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-default)]'
+                        'flex gap-3',
+                        message.role === 'user' && 'flex-row-reverse'
                       )}
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium opacity-70">
-                          {message.role === 'user' ? 'You' : 'ClowdBot'}
-                        </span>
-                        {message.timestamp && (
-                          <span className="text-xs opacity-50">{message.timestamp}</span>
+                      <div
+                        className={cn(
+                          'max-w-[80%] rounded-xl px-4 py-3',
+                          message.role === 'user'
+                            ? 'bg-[var(--accent-primary)] text-white'
+                            : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-default)]'
                         )}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium opacity-70">
+                            {message.role === 'user' ? 'You' : 'Bot'}
+                          </span>
+                          {message.timestamp && (
+                            <span className="text-xs opacity-50">{message.timestamp}</span>
+                          )}
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-sm text-[var(--text-muted)]">No messages for this day.</p>
+                </div>
+              )}
             </div>
           </>
         ) : (
           <EmptyState
             icon={MessageSquare}
-            title="No conversation selected"
-            description="Select a date from the calendar to view the conversation"
+            title="No date selected"
+            description="Select any day in the calendar to view the chat."
             className="flex-1"
           />
         )}
