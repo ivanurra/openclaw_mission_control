@@ -9,6 +9,8 @@ export interface TaskAttachment {
   type: string;
   createdAt: string;
   storageName?: string;
+  source?: 'upload' | 'docs';
+  documentId?: string;
 }
 
 export interface TaskComment {

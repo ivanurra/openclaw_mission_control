@@ -50,6 +50,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         type: file.type,
         createdAt: toISOString(),
         storageName,
+        source: 'upload',
       });
     }
 

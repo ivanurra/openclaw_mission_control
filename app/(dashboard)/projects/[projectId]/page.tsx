@@ -20,10 +20,32 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { ArrowLeft, Plus, Settings, Trash2, Paperclip, MessageSquare, Send, Clock, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Plus,
+  Settings,
+  Trash2,
+  Paperclip,
+  MessageSquare,
+  Send,
+  Clock,
+  X,
+  FileText,
+} from 'lucide-react';
 import Link from 'next/link';
 import { Button, Modal, Input, Textarea, Select, Avatar } from '@/components/ui';
-import type { Project, Task, Developer, TaskStatus, CreateTaskInput, TaskPriority, TaskAttachment, TaskComment } from '@/types';
+import type {
+  Project,
+  Task,
+  Developer,
+  TaskStatus,
+  CreateTaskInput,
+  TaskPriority,
+  TaskAttachment,
+  TaskComment,
+  Document,
+  Folder,
+} from '@/types';
 import { KANBAN_COLUMNS, PRIORITIES } from '@/lib/constants/kanban';
 import { KanbanColumn } from '@/components/projects/kanban-column';
 import { TaskCard } from '@/components/projects/task-card';
@@ -52,8 +74,14 @@ export default function ProjectKanbanPage({ params }: Props) {
   const [commentDraft, setCommentDraft] = useState('');
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [isLinkingDocs, setIsLinkingDocs] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [isDocsPickerOpen, setIsDocsPickerOpen] = useState(false);
+  const [docsForLinking, setDocsForLinking] = useState<Document[]>([]);
+  const [foldersForLinking, setFoldersForLinking] = useState<Folder[]>([]);
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [docSearchQuery, setDocSearchQuery] = useState('');
 
   // Modal states
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -305,6 +333,80 @@ export default function ProjectKanbanPage({ params }: Props) {
     }
   }
 
+  function closeDocsPicker() {
+    setIsDocsPickerOpen(false);
+    setSelectedDocIds([]);
+    setDocSearchQuery('');
+  }
+
+  async function handleOpenDocsPicker() {
+    if (!editingTask) return;
+    setAttachmentError(null);
+
+    try {
+      const [docsRes, foldersRes] = await Promise.all([
+        fetch('/api/documents'),
+        fetch('/api/folders'),
+      ]);
+
+      if (!docsRes.ok || !foldersRes.ok) {
+        throw new Error('Failed to load docs');
+      }
+
+      const [docsData, foldersData] = await Promise.all([
+        docsRes.json() as Promise<Document[]>,
+        foldersRes.json() as Promise<Folder[]>,
+      ]);
+
+      setDocsForLinking(docsData);
+      setFoldersForLinking(foldersData);
+      setSelectedDocIds([]);
+      setDocSearchQuery('');
+      setIsDocsPickerOpen(true);
+    } catch (error) {
+      console.error('Failed to load docs for linking:', error);
+      setAttachmentError('Could not load documents from Docs.');
+    }
+  }
+
+  async function handleLinkDocuments() {
+    if (!editingTask || selectedDocIds.length === 0) return;
+
+    try {
+      setIsLinkingDocs(true);
+      setAttachmentError(null);
+
+      const res = await fetch(`/api/projects/${projectId}/tasks/${editingTask.id}/attachments/docs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentIds: selectedDocIds }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to link documents');
+      }
+
+      const updated = await res.json();
+      applyTaskUpdate(updated);
+      closeDocsPicker();
+    } catch (error) {
+      console.error('Failed to link documents:', error);
+      setAttachmentError('Could not link documents.');
+    } finally {
+      setIsLinkingDocs(false);
+    }
+  }
+
+  function toggleSelectedDoc(documentId: string, shouldSelect: boolean) {
+    setSelectedDocIds((prev) => {
+      if (shouldSelect) {
+        if (prev.includes(documentId)) return prev;
+        return [...prev, documentId];
+      }
+      return prev.filter((id) => id !== documentId);
+    });
+  }
+
   async function handleAttachmentUpload(event: React.ChangeEvent<HTMLInputElement>) {
     if (!editingTask) return;
     const files = event.target.files ? Array.from(event.target.files) : [];
@@ -459,6 +561,37 @@ export default function ProjectKanbanPage({ params }: Props) {
   }
 
   const detailTask = editingTask;
+  const foldersById = useMemo(
+    () => new Map(foldersForLinking.map((folder) => [folder.id, folder])),
+    [foldersForLinking]
+  );
+
+  const linkedDocumentIds = useMemo(() => {
+    const linkedIds = new Set<string>();
+    for (const attachment of detailTask?.attachments ?? []) {
+      if (attachment.documentId) {
+        linkedIds.add(attachment.documentId);
+      }
+    }
+    return linkedIds;
+  }, [detailTask?.attachments]);
+
+  const filteredDocsForLinking = useMemo(() => {
+    const normalizedQuery = docSearchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return docsForLinking;
+    return docsForLinking.filter((doc) => {
+      const folder = doc.folderId ? foldersById.get(doc.folderId) : null;
+      const folderName = folder?.name.toLowerCase() || '';
+      return (
+        doc.title.toLowerCase().includes(normalizedQuery)
+        || folderName.includes(normalizedQuery)
+      );
+    });
+  }, [docSearchQuery, docsForLinking, foldersById]);
+  const docsById = useMemo(
+    () => new Map(docsForLinking.map((doc) => [doc.id, doc])),
+    [docsForLinking]
+  );
 
   const mentionQuery = useMemo(() => {
     const match = commentDraft.match(/@([\w\s.-]*)$/);
@@ -480,6 +613,21 @@ export default function ProjectKanbanPage({ params }: Props) {
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function getFolderPath(folderId: string | null): string {
+    if (!folderId) return 'Root';
+    const parts: string[] = [];
+    let currentId: string | null = folderId;
+
+    while (currentId) {
+      const folder = foldersById.get(currentId);
+      if (!folder) break;
+      parts.unshift(folder.name);
+      currentId = folder.parentId;
+    }
+
+    return parts.length > 0 ? parts.join(' / ') : 'Root';
   }
 
   function renderCommentContent(content: string) {
@@ -504,6 +652,7 @@ export default function ProjectKanbanPage({ params }: Props) {
 
   function openCreateTaskModal(status: TaskStatus = 'backlog') {
     setEditingTask(null);
+    closeDocsPicker();
     setTaskForm({
       projectId: project?.id || '',
       title: '',
@@ -520,6 +669,7 @@ export default function ProjectKanbanPage({ params }: Props) {
 
   function openEditTaskModal(task: Task) {
     setEditingTask(task);
+    closeDocsPicker();
     setTaskForm({
       projectId: task.projectId,
       title: task.title,
@@ -537,6 +687,7 @@ export default function ProjectKanbanPage({ params }: Props) {
   function closeTaskModal() {
     setIsTaskModalOpen(false);
     setEditingTask(null);
+    closeDocsPicker();
     setTaskForm({
       projectId: '',
       title: '',
@@ -819,8 +970,17 @@ export default function ProjectKanbanPage({ params }: Props) {
                       type="button"
                       size="sm"
                       variant="secondary"
+                      onClick={() => void handleOpenDocsPicker()}
+                      disabled={isUploadingAttachment || isLinkingDocs}
+                    >
+                      {isLinkingDocs ? 'Linking...' : 'Link docs'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
                       onClick={() => attachmentInputRef.current?.click()}
-                      disabled={isUploadingAttachment}
+                      disabled={isUploadingAttachment || isLinkingDocs}
                     >
                       {isUploadingAttachment ? 'Uploading...' : 'Add files'}
                     </Button>
@@ -833,36 +993,48 @@ export default function ProjectKanbanPage({ params }: Props) {
                   {(detailTask.attachments?.length ?? 0) === 0 ? (
                     <p className="text-sm text-[var(--text-muted)]">No attachments yet.</p>
                   ) : (
-                    (detailTask.attachments ?? []).map((attachment) => (
-                      <div
-                        key={attachment.id}
-                        className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)]"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm text-[var(--text-primary)] truncate">
-                            {attachment.name}
-                          </p>
-                          <p className="text-xs text-[var(--text-muted)]">
-                            {formatFileSize(attachment.size)}
-                          </p>
+                    (detailTask.attachments ?? []).map((attachment) => {
+                      const isDocsAttachment = attachment.source === 'docs' || !!attachment.documentId;
+                      const linkedDocument = attachment.documentId
+                        ? docsById.get(attachment.documentId)
+                        : null;
+                      const attachmentHref = isDocsAttachment && attachment.documentId
+                        ? `/docs/${attachment.documentId}`
+                        : `/api/projects/${projectId}/tasks/${detailTask.id}/attachments/${attachment.id}`;
+
+                      return (
+                        <div
+                          key={attachment.id}
+                          className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)]"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm text-[var(--text-primary)] truncate">
+                              {attachment.name}
+                            </p>
+                            <p className="text-xs text-[var(--text-muted)]">
+                              {isDocsAttachment && attachment.documentId
+                                ? linkedDocument ? `Docs • ${getFolderPath(linkedDocument.folderId)}` : 'Docs'
+                                : formatFileSize(attachment.size)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={attachmentHref}
+                              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                            >
+                              {isDocsAttachment ? 'Open' : 'Download'}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveAttachment(attachment)}
+                              className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)] hover:bg-[var(--bg-elevated)]"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={`/api/projects/${projectId}/tasks/${detailTask.id}/attachments/${attachment.id}`}
-                            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                          >
-                            Download
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAttachment(attachment)}
-                            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent-danger)] hover:bg-[var(--bg-elevated)]"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -938,7 +1110,7 @@ export default function ProjectKanbanPage({ params }: Props) {
             </div>
           ) : (
             <div className="border-t border-[var(--border-default)] pt-4 text-sm text-[var(--text-muted)]">
-              Save the task to add timeline details, attachments, and comments.
+              Save the task to add timeline details, attachments, linked docs, and comments.
             </div>
           )}
 
@@ -951,6 +1123,91 @@ export default function ProjectKanbanPage({ params }: Props) {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={isDocsPickerOpen}
+        onClose={() => {
+          if (!isLinkingDocs) closeDocsPicker();
+        }}
+        title="Link Docs"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Search Docs"
+            placeholder="Search by title or folder"
+            value={docSearchQuery}
+            onChange={(event) => setDocSearchQuery(event.target.value)}
+          />
+
+          <div className="max-h-[360px] overflow-y-auto rounded-lg border border-[var(--border-default)] divide-y divide-[var(--border-default)]">
+            {filteredDocsForLinking.length === 0 ? (
+              <div className="p-4 text-sm text-[var(--text-muted)]">
+                No documents found.
+              </div>
+            ) : (
+              filteredDocsForLinking.map((doc) => {
+                const alreadyLinked = linkedDocumentIds.has(doc.id);
+                const isSelected = selectedDocIds.includes(doc.id);
+
+                return (
+                  <label
+                    key={doc.id}
+                    className="flex items-start gap-3 p-3 cursor-pointer hover:bg-[var(--bg-tertiary)]"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={isSelected}
+                      disabled={alreadyLinked}
+                      onChange={(event) => toggleSelectedDoc(doc.id, event.target.checked)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <FileText size={14} className="text-[var(--text-muted)] shrink-0" />
+                        <p className="text-sm text-[var(--text-primary)] truncate">{doc.title}</p>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        {getFolderPath(doc.folderId)}
+                      </p>
+                    </div>
+                    {alreadyLinked && (
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                        Linked
+                      </span>
+                    )}
+                  </label>
+                );
+              })
+            )}
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+            <span>{selectedDocIds.length} selected</span>
+            <span>{linkedDocumentIds.size} already linked</span>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={closeDocsPicker}
+              disabled={isLinkingDocs}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="flex-1"
+              onClick={() => void handleLinkDocuments()}
+              disabled={selectedDocIds.length === 0 || isLinkingDocs}
+            >
+              {isLinkingDocs ? 'Linking...' : 'Link selected'}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Delete Task Modal */}

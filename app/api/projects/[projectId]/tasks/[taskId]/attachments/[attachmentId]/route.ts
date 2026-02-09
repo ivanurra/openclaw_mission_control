@@ -24,6 +24,11 @@ export async function GET(
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
     }
 
+    if (attachment.documentId) {
+      const redirectUrl = new URL(`/docs/${attachment.documentId}`, request.url);
+      return NextResponse.redirect(redirectUrl);
+    }
+
     const storageName = attachment.storageName || attachment.id;
     const filePath = getTaskAttachmentPath(projectId, taskId, storageName);
     const fileBuffer = await fs.readFile(filePath);
@@ -56,16 +61,25 @@ export async function DELETE(
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
     }
 
-    const storageName = attachment.storageName || attachment.id;
-    const filePath = getTaskAttachmentPath(projectId, taskId, storageName);
-    try {
-      await fs.unlink(filePath);
-    } catch {
-      // ignore missing file
+    if (!attachment.documentId) {
+      const storageName = attachment.storageName || attachment.id;
+      const filePath = getTaskAttachmentPath(projectId, taskId, storageName);
+      try {
+        await fs.unlink(filePath);
+      } catch {
+        // ignore missing file
+      }
     }
 
     const remaining = task.attachments.filter((item) => item.id !== attachmentId);
-    const updated = await updateTask(projectId, taskId, { attachments: remaining });
+    const updatedLinkedDocumentIds = attachment.documentId
+      && !remaining.some((item) => item.documentId === attachment.documentId)
+      ? task.linkedDocumentIds.filter((docId) => docId !== attachment.documentId)
+      : task.linkedDocumentIds;
+    const updated = await updateTask(projectId, taskId, {
+      attachments: remaining,
+      linkedDocumentIds: updatedLinkedDocumentIds,
+    });
 
     return NextResponse.json(updated);
   } catch (error) {
