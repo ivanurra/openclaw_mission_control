@@ -3,14 +3,14 @@
 import { useState, useEffect } from 'react';
 import { Plus, FolderKanban } from 'lucide-react';
 import { Button, Modal, Input, Textarea, EmptyState } from '@/components/ui';
-import type { Project, CreateProjectInput, Developer } from '@/types';
+import type { Project, CreateProjectInput, Member } from '@/types';
 import { cn } from '@/lib/utils/cn';
 import { PROJECT_COLORS } from '@/lib/constants/kanban';
 import Link from 'next/link';
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [developers, setDevelopers] = useState<Developer[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<CreateProjectInput>({
@@ -21,7 +21,7 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     fetchProjects();
-    fetchDevelopers();
+    fetchMembers();
   }, []);
 
   async function fetchProjects() {
@@ -36,13 +36,13 @@ export default function ProjectsPage() {
     }
   }
 
-  async function fetchDevelopers() {
+  async function fetchMembers() {
     try {
-      const res = await fetch('/api/developers');
+      const res = await fetch('/api/members');
       const data = await res.json();
-      setDevelopers(data);
+      setMembers(data);
     } catch (error) {
-      console.error('Failed to fetch developers:', error);
+      console.error('Failed to fetch members:', error);
     }
   }
 
@@ -125,7 +125,7 @@ export default function ProjectsPage() {
                     {project.name}
                   </h3>
                   <p className="text-xs text-[var(--text-muted)]">
-                    {project.developerIds.length} member{project.developerIds.length !== 1 ? 's' : ''}
+                    {project.memberIds.length} member{project.memberIds.length !== 1 ? 's' : ''}
                   </p>
                 </div>
               </div>

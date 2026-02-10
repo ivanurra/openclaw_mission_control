@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProjects } from '@/lib/storage/projects-storage';
 import { getDocuments } from '@/lib/storage/documents-storage';
-import { getDevelopers } from '@/lib/storage/developers-storage';
+import { getMembers } from '@/lib/storage/members-storage';
 import { getTasks } from '@/lib/storage/tasks-storage';
 import { searchConversations } from '@/lib/storage/memory-storage';
 import { KANBAN_COLUMNS } from '@/lib/constants/kanban';
@@ -105,10 +105,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [projects, documents, developers] = await Promise.all([
+    const [projects, documents, members] = await Promise.all([
       getProjects(),
       getDocuments(),
-      getDevelopers(),
+      getMembers(),
     ]);
 
     const projectTasks = await Promise.all(
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
         title: project.name,
         subtitle: project.description || undefined,
         href: `/projects/${project.slug}`,
-        meta: `${project.developerIds.length} member${project.developerIds.length !== 1 ? 's' : ''}`,
+        meta: `${project.memberIds.length} member${project.memberIds.length !== 1 ? 's' : ''}`,
         score,
       });
     }
@@ -154,20 +154,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    for (const developer of developers) {
+    for (const member of members) {
       const { matches, score } = computeMatchScore(
-        [developer.name, developer.role || '', developer.description || ''],
+        [member.name, member.role || '', member.description || ''],
         tokens
       );
       if (matches === 0) continue;
       results.push({
-        id: developer.id,
+        id: member.id,
         type: 'person',
-        title: developer.name,
-        subtitle: developer.role || developer.description || undefined,
-        href: `/people?developer=${developer.id}`,
-        meta: developer.projectIds.length
-          ? `${developer.projectIds.length} project${developer.projectIds.length !== 1 ? 's' : ''}`
+        title: member.name,
+        subtitle: member.role || member.description || undefined,
+        href: `/people?member=${member.id}`,
+        meta: member.projectIds.length
+          ? `${member.projectIds.length} project${member.projectIds.length !== 1 ? 's' : ''}`
           : undefined,
         score,
       });

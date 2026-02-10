@@ -13,7 +13,7 @@ It is designed for fast local workflows with file-based persistence, so you can 
 - Kanban execution board per project with drag-and-drop, status lanes, and ordering.
 - Recurring lane support (`recurring`) for tasks that are part of ongoing bot operations.
 - Task detail workflows: priority, assignee, comments, timeline metadata, and file attachments.
-- Team directory (`People`) with create/edit/delete and assignment-ready developer profiles.
+- Team directory (`People`) with create/edit/delete and assignment-ready member profiles.
 - Documentation hub with:
   - Nested folders
   - Drag-and-drop move for folders/documents
@@ -97,7 +97,7 @@ By default, data is stored under `./data`.
 You can override this with:
 
 ```bash
-ENDUR_DATA_DIR=/absolute/path/to/data
+MC_DATA_DIR=/absolute/path/to/data
 ```
 
 This is useful for testing and isolated environments.
@@ -106,8 +106,8 @@ This is useful for testing and isolated environments.
 
 ```text
 data/
-├── developers/
-│   └── developers.json
+├── members/
+│   └── members.json
 ├── documents/
 │   ├── index.json
 │   └── *.md
@@ -147,8 +147,8 @@ Supported assistant role keywords include `assistant` and `bot`.
 - `GET/PUT/DELETE /api/projects/[projectId]/tasks/[taskId]`
 - `POST /api/projects/[projectId]/tasks/[taskId]/attachments`
 - `GET/DELETE /api/projects/[projectId]/tasks/[taskId]/attachments/[attachmentId]`
-- `GET/POST /api/developers`
-- `GET/PUT/DELETE /api/developers/[developerId]`
+- `GET/POST /api/members`
+- `GET/PUT/DELETE /api/members/[memberId]`
 - `GET/POST /api/documents`
 - `GET/PUT/DELETE /api/documents/[docId]`
 - `GET/POST /api/folders`

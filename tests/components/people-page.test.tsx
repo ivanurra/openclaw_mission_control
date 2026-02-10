@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 describe('PeoplePage', () => {
-  it('renders developers from API', async () => {
+  it('renders members from API', async () => {
     mockFetchSequence([
       [
         {
@@ -27,6 +27,7 @@ describe('PeoplePage', () => {
           createdAt: '2024-01-01T00:00:00Z',
         },
       ],
+      [], // activity for d1
     ]);
 
     render(<PeoplePage />);
@@ -35,15 +36,15 @@ describe('PeoplePage', () => {
     expect(screen.getByText('Backend')).toBeInTheDocument();
   });
 
-  it('opens add person modal', async () => {
+  it('opens add member modal', async () => {
     mockFetchSequence([[]]);
 
     render(<PeoplePage />);
 
-    expect(await screen.findByText('People')).toBeInTheDocument();
+    expect(await screen.findByText('Crew')).toBeInTheDocument();
     const user = userEvent.setup();
-    const buttons = screen.getAllByRole('button', { name: /add person/i });
+    const buttons = screen.getAllByRole('button', { name: /add member/i });
     await user.click(buttons[0]);
-    expect(await screen.findByRole('heading', { name: 'Add Person' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Add Member' })).toBeInTheDocument();
   });
 });

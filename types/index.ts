@@ -29,14 +29,14 @@ export interface Project {
   color: string;
   createdAt: string;
   updatedAt: string;
-  developerIds: string[];
+  memberIds: string[];
 }
 
 export interface CreateProjectInput {
   name: string;
   description?: string;
   color?: string;
-  developerIds?: string[];
+  memberIds?: string[];
 }
 
 export interface Task {
@@ -47,7 +47,7 @@ export interface Task {
   status: TaskStatus;
   recurring: boolean;
   priority: TaskPriority;
-  assignedDeveloperId?: string;
+  assignedMemberId?: string;
   linkedDocumentIds: string[];
   attachments: TaskAttachment[];
   comments: TaskComment[];
@@ -64,29 +64,33 @@ export interface CreateTaskInput {
   status?: TaskStatus;
   recurring?: boolean;
   priority?: TaskPriority;
-  assignedDeveloperId?: string;
+  assignedMemberId?: string;
   linkedDocumentIds?: string[];
   attachments?: TaskAttachment[];
   comments?: TaskComment[];
 }
 
-// Developer Types
-export interface Developer {
+// Member Types
+export interface Member {
   id: string;
   name: string;
   description?: string;
   avatar?: string;
   color: string;
   role?: string;
+  llmModel?: string;
+  soulMd?: string;
+  memoryMd?: string;
   projectIds: string[];
   createdAt: string;
 }
 
-export interface CreateDeveloperInput {
+export interface CreateMemberInput {
   name: string;
   description?: string;
   role?: string;
   color?: string;
+  llmModel?: string;
 }
 
 // Document Types
@@ -161,6 +165,7 @@ export interface ScheduledTask {
   time: string;
   dayOfWeek: DayOfWeek;
   color: string;
+  assignedMemberId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -171,6 +176,7 @@ export interface CreateScheduledTaskInput {
   time: string;
   dayOfWeek: DayOfWeek;
   color: string;
+  assignedMemberId?: string;
 }
 
 // UI Types

@@ -1,5 +1,5 @@
 {
-  "name": "endur_projects",
+  "name": "mission_control",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,8 +11,8 @@
     "test:watch": "vitest",
     "cy:open": "cypress open",
     "cy:run": "cypress run",
-    "e2e": "cross-env ENDUR_DATA_DIR=.cypress-data start-server-and-test dev http://localhost:3000 cy:run",
-    "e2e:open": "cross-env ENDUR_DATA_DIR=.cypress-data start-server-and-test dev http://localhost:3000 cy:open",
+    "e2e": "cross-env MC_DATA_DIR=.cypress-data start-server-and-test dev http://localhost:3000 cy:run",
+    "e2e:open": "cross-env MC_DATA_DIR=.cypress-data start-server-and-test dev http://localhost:3000 cy:open",
     "test:all": "npm run test && npm run e2e"
   },
   "dependencies": {

@@ -5,36 +5,52 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Development Commands
 
 ```bash
-npm run dev      # Start development server (http://localhost:3000)
-npm run build    # Build for production
-npm run start    # Start production server
-npm run lint     # Run ESLint
+npm run dev        # Start development server (http://localhost:3000)
+npm run build      # Build for production
+npm run start      # Start production server
+npm run lint       # Run ESLint
+npm run test       # Run Vitest unit tests (single run)
+npm run test:watch # Run Vitest in watch mode
+npm run e2e        # Run Cypress E2E tests (headless, uses .cypress-data)
+npm run e2e:open   # Open Cypress UI for interactive E2E testing
+npm run test:all   # Run unit + E2E tests
 ```
 
 ## Architecture Overview
 
-Endur is a local-first productivity app built with Next.js 16 (App Router), TypeScript, and Tailwind CSS v4. It has three main modules:
+Mission Control is a local-first productivity app built with Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS v4. It has five main modules:
 
-1. **Projects** - Kanban board with drag-and-drop (dnd-kit)
-2. **Docs** - Markdown editor with folder hierarchy
-3. **Memory** - Read-only bot conversation viewer
+1. **Projects** - Kanban board with drag-and-drop (dnd-kit), task cards with markdown descriptions and file attachments linked to Docs
+2. **Docs** - Markdown editor (`@uiw/react-md-editor`) with folder hierarchy, document CRUD, and sidebar navigation
+3. **People (Crew)** - Team member profiles and management
+4. **Memory** - Read-only bot conversation viewer organized by date
+5. **Scheduled** - Scheduled tasks with date widget, edit/delete modals
 
 ### Data Flow
 
 All data is stored locally in `/data` as `.md` and `.json` files. The app uses Next.js API routes to perform file system operations:
 
 ```
-Browser → fetch() → /app/api/* routes → /lib/storage/* utilities → /data/* files
+Browser → fetch()/SWR → /app/api/* routes → /lib/storage/* utilities → /data/* files
 ```
 
 ### Key Directories
 
-- `/app/(dashboard)/` - Main app pages (projects, docs, people, memory)
-- `/app/api/` - API routes for CRUD operations
-- `/lib/storage/` - File system utilities (projects-storage.ts, tasks-storage.ts, etc.)
-- `/components/ui/` - Reusable UI primitives (Button, Modal, Input, etc.)
-- `/components/layout/` - Navbar, Sidebar, Logo
-- `/components/projects/` - Kanban components (KanbanColumn, TaskCard)
+- `/app/(dashboard)/` - Main app pages (projects, docs, people, memory, scheduled)
+- `/app/(dashboard)/docs/[docId]/` - Individual document editor page
+- `/app/api/` - API routes: projects, documents, folders, members, memory, scheduled, search
+- `/lib/storage/` - File system utilities:
+  - `projects-storage.ts`, `tasks-storage.ts` - Projects & Kanban tasks
+  - `documents-storage.ts` - Docs CRUD
+  - `members-storage.ts` - Crew/people management
+  - `memory-storage.ts` - Memory log reader
+  - `scheduled-storage.ts` - Scheduled tasks
+  - `file-system.ts` - Low-level FS helpers
+- `/lib/constants/kanban.ts` - Kanban column definitions
+- `/lib/utils/` - `cn.ts` (class merging), `date.ts` (date formatting), `id.ts` (ID generation)
+- `/components/ui/` - Reusable UI primitives (Button, Modal, Input, Select, Textarea, Badge, Avatar, Skeleton, EmptyState)
+- `/components/layout/` - Navbar, Sidebar, Logo, GlobalSearch, TaskSearch, MadridClock
+- `/components/projects/` - KanbanColumn, TaskCard
 - `/types/index.ts` - All TypeScript interfaces
 
 ### Data Storage Structure
@@ -42,13 +58,34 @@ Browser → fetch() → /app/api/* routes → /lib/storage/* utilities → /data
 ```
 /data/
 ├── projects/[slug]/project.json + tasks/[id].md
-├── developers/developers.json
-├── documents/index.json + [slug].md
-└── memory/[YYYY]/[MM]/[DD].md
+├── members/members.json
+├── documents/index.json + [slug].md   (index.json holds folder tree & doc metadata)
+└── memory/ (not persisted in /data, loaded from external path)
 ```
 
 Tasks and documents use YAML frontmatter in markdown files (parsed with `gray-matter`).
 
+### Key Libraries
+
+- **dnd-kit** - Drag-and-drop for Kanban board
+- **SWR** - Client-side data fetching & caching
+- **gray-matter** - YAML frontmatter parsing
+- **@uiw/react-md-editor** - Markdown editor for Docs
+- **react-markdown + remark-gfm** - Markdown rendering
+- **lucide-react** - Icon library
+- **date-fns** - Date utilities
+- **uuid** - ID generation
+- **turndown** - HTML to Markdown conversion
+
+### Testing
+
+- **Unit tests** (`/tests/`): Vitest + React Testing Library
+  - `/tests/components/` - Component tests (navbar, pages, task-card, etc.)
+  - `/tests/storage/` - Storage utility tests
+- **E2E tests** (`/cypress/e2e/`): Cypress
+  - `projects.cy.ts`, `docs.cy.ts`, `people.cy.ts`
+  - E2E runs use isolated `.cypress-data` directory via `MC_DATA_DIR` env var
+
 ### Styling
 
-Uses CSS custom properties defined in `/app/globals.css` (dark theme only). Access via `var(--bg-primary)`, `var(--text-secondary)`, etc. Use the `cn()` utility from `/lib/utils/cn.ts` for conditional class merging.
+Uses CSS custom properties defined in `/app/globals.css` (dark theme only). Access via `var(--bg-primary)`, `var(--text-secondary)`, etc. Use the `cn()` utility from `/lib/utils/cn.ts` for conditional class merging (clsx + tailwind-merge).

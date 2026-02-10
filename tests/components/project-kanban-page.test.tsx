@@ -24,7 +24,7 @@ const project = {
   color: '#22c55e',
   createdAt: '2025-01-01T00:00:00Z',
   updatedAt: '2025-01-01T00:00:00Z',
-  developerIds: [],
+  memberIds: [],
 };
 
 const tasks = [
@@ -36,7 +36,7 @@ const tasks = [
     status: 'recurring',
     recurring: true,
     priority: 'low',
-    assignedDeveloperId: undefined,
+    assignedMemberId: undefined,
     linkedDocumentIds: [],
     order: 0,
     createdAt: '2025-01-01T00:00:00Z',
@@ -50,7 +50,7 @@ const tasks = [
     status: 'todo',
     recurring: false,
     priority: 'medium',
-    assignedDeveloperId: undefined,
+    assignedMemberId: undefined,
     linkedDocumentIds: [],
     order: 0,
     createdAt: '2025-01-01T00:00:00Z',
@@ -64,7 +64,7 @@ const tasks = [
     status: 'in_progress',
     recurring: false,
     priority: 'high',
-    assignedDeveloperId: undefined,
+    assignedMemberId: undefined,
     linkedDocumentIds: [],
     order: 0,
     createdAt: '2025-01-01T00:00:00Z',
@@ -78,7 +78,7 @@ const tasks = [
     status: 'done',
     recurring: false,
     priority: 'medium',
-    assignedDeveloperId: undefined,
+    assignedMemberId: undefined,
     linkedDocumentIds: [],
     order: 0,
     createdAt: '2025-01-01T00:00:00Z',
@@ -86,9 +86,9 @@ const tasks = [
   },
 ];
 
-const developers: unknown[] = [];
+const members: unknown[] = [];
 
-async function renderPage(fetchMock = mockFetchSequence([project, tasks, developers])) {
+async function renderPage(fetchMock = mockFetchSequence([project, tasks, members])) {
   let renderResult: ReturnType<typeof render>;
   await act(async () => {
     renderResult = render(<ProjectKanbanPage params={Promise.resolve({ projectId: 'alpha' })} />);
@@ -194,8 +194,8 @@ describe('ProjectKanbanPage', () => {
       if (url === '/api/projects/alpha/tasks' && !init) {
         return { ok: true, json: async () => tasks } as Response;
       }
-      if (url === '/api/developers' && !init) {
-        return { ok: true, json: async () => developers } as Response;
+      if (url === '/api/members' && !init) {
+        return { ok: true, json: async () => members } as Response;
       }
       if (url === '/api/documents' && !init) {
         return { ok: true, json: async () => docs } as Response;
@@ -247,7 +247,7 @@ describe('ProjectKanbanPage', () => {
         : task
     );
 
-    await renderPage(mockFetchSequence([project, tasksWithLinkedDoc, developers]));
+    await renderPage(mockFetchSequence([project, tasksWithLinkedDoc, members]));
 
     const user = userEvent.setup();
     await user.click(await screen.findByText('Draft brief'));
@@ -323,7 +323,7 @@ describe('ProjectKanbanPage', () => {
       const url = String(input);
       if (url === '/api/projects/alpha' && !init) return { ok: true, json: async () => project } as Response;
       if (url === '/api/projects/alpha/tasks' && !init) return { ok: true, json: async () => tasksWithLinkedDoc } as Response;
-      if (url === '/api/developers' && !init) return { ok: true, json: async () => developers } as Response;
+      if (url === '/api/members' && !init) return { ok: true, json: async () => members } as Response;
       if (url === '/api/documents' && !init) return { ok: true, json: async () => docs } as Response;
       if (url === '/api/folders' && !init) return { ok: true, json: async () => folders } as Response;
       if (url.includes('/attachments/docs') && init?.method === 'POST') {
@@ -355,7 +355,7 @@ describe('ProjectKanbanPage', () => {
   });
 
   it('allows updating the project name in settings', async () => {
-    const fetchMock = mockFetchSequence([project, tasks, developers]);
+    const fetchMock = mockFetchSequence([project, tasks, members]);
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ...project, name: 'Alpha Updated' }),

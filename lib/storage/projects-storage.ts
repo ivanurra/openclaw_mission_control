@@ -20,8 +20,17 @@ export async function getProjects(): Promise<Project[]> {
 
   for (const folder of folders) {
     const projectPath = path.join(PROJECTS_DIR, folder, 'project.json');
-    const project = await readJsonFile<Project>(projectPath);
-    if (project) projects.push(project);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = await readJsonFile<any>(projectPath);
+    if (raw) {
+      // Backwards compat: migrate old developerIds → memberIds
+      if (raw.developerIds && !raw.memberIds) {
+        raw.memberIds = raw.developerIds;
+        delete raw.developerIds;
+      }
+      raw.memberIds = raw.memberIds ?? [];
+      projects.push(raw as Project);
+    }
   }
 
   return projects.sort((a, b) =>
@@ -36,7 +45,16 @@ export async function getProject(id: string): Promise<Project | null> {
 
 export async function getProjectBySlug(slug: string): Promise<Project | null> {
   const projectPath = path.join(PROJECTS_DIR, slug, 'project.json');
-  return await readJsonFile<Project>(projectPath);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = await readJsonFile<any>(projectPath);
+  if (!raw) return null;
+  // Backwards compat: migrate old developerIds → memberIds
+  if (raw.developerIds && !raw.memberIds) {
+    raw.memberIds = raw.developerIds;
+    delete raw.developerIds;
+  }
+  raw.memberIds = raw.memberIds ?? [];
+  return raw as Project;
 }
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
@@ -62,7 +80,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     color: input.color || PROJECT_COLORS[projects.length % PROJECT_COLORS.length],
     createdAt: now,
     updatedAt: now,
-    developerIds: input.developerIds || [],
+    memberIds: input.memberIds || [],
   };
 
   const projectDir = path.join(PROJECTS_DIR, slug);

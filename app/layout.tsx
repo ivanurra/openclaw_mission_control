@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Endur - Project Management',
+  title: 'Mission Control',
   description: 'Local-first productivity application for project management, documentation, and team collaboration.',
 };
 

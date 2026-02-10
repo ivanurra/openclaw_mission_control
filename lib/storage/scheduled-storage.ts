@@ -7,8 +7,17 @@ import { toISOString } from '@/lib/utils/date';
 const SCHEDULED_FILE = path.join(DATA_DIR, 'scheduled', 'tasks.json');
 
 export async function getScheduledTasks(): Promise<ScheduledTask[]> {
-  const tasks = await readJsonFile<ScheduledTask[]>(SCHEDULED_FILE);
-  return tasks || [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tasks = await readJsonFile<any[]>(SCHEDULED_FILE);
+  if (!tasks) return [];
+  // Backwards compat: migrate old assignedDeveloperId → assignedMemberId
+  return tasks.map(t => {
+    if (t.assignedDeveloperId && !t.assignedMemberId) {
+      t.assignedMemberId = t.assignedDeveloperId;
+      delete t.assignedDeveloperId;
+    }
+    return t as ScheduledTask;
+  });
 }
 
 export async function createScheduledTask(input: CreateScheduledTaskInput): Promise<ScheduledTask> {
@@ -22,6 +31,7 @@ export async function createScheduledTask(input: CreateScheduledTaskInput): Prom
     time: input.time,
     dayOfWeek: input.dayOfWeek,
     color: input.color,
+    assignedMemberId: input.assignedMemberId,
     createdAt: now,
     updatedAt: now,
   };

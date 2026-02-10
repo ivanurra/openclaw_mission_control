@@ -38,11 +38,10 @@ describe('Navbar', () => {
     expect(scheduledIndex).toBe(projectsIndex + 1);
   });
 
-  it('shows mocked AI model and gateway online status in top bar', () => {
+  it('shows gateway online status in top bar', () => {
     pathname = '/projects';
     render(<Navbar />);
 
-    expect(screen.getByText('Opus 4.6')).toBeInTheDocument();
     expect(screen.getByText('ONLINE')).toBeInTheDocument();
     expect(screen.queryByText('DISCONNECTED')).not.toBeInTheDocument();
   });
@@ -56,11 +55,10 @@ describe('Navbar', () => {
     expect(within(nav).queryByRole('link', { name: /people/i })).not.toBeInTheDocument();
   });
 
-  it('orders model, Madrid clock, status, and search in the header', () => {
+  it('orders Madrid clock, status, and search in the header', () => {
     pathname = '/projects';
     render(<Navbar />);
 
-    const model = screen.getByText('Opus 4.6');
     const date = screen.getByTestId('madrid-clock-date');
     const time = screen.getByTestId('madrid-clock-time');
     const status = screen.getByText('ONLINE');
@@ -68,7 +66,6 @@ describe('Navbar', () => {
 
     expect(time.textContent).toBe('11:15');
 
-    expect(model.compareDocumentPosition(date) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(date.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(status.compareDocumentPosition(searchButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

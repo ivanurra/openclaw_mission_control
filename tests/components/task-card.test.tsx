@@ -14,7 +14,7 @@ const baseTask: Task = {
   status: 'todo',
   recurring: false,
   priority: 'medium',
-  assignedDeveloperId: undefined,
+  assignedMemberId: undefined,
   linkedDocumentIds: [],
   attachments: [],
   comments: [],

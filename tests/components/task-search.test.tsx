@@ -43,7 +43,7 @@ describe('TaskSearch', () => {
           status: 'todo',
           recurring: false,
           priority: 'medium',
-          assignedDeveloperId: undefined,
+          assignedMemberId: undefined,
           linkedDocumentIds: [],
           order: 0,
           createdAt: '2025-01-01T00:00:00Z',

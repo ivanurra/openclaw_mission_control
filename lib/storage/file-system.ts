@@ -2,8 +2,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 
-export const DATA_DIR = process.env.ENDUR_DATA_DIR
-  ? path.resolve(process.env.ENDUR_DATA_DIR)
+export const DATA_DIR = process.env.MC_DATA_DIR
+  ? path.resolve(process.env.MC_DATA_DIR)
   : path.join(process.cwd(), 'data');
 
 export async function ensureDir(dirPath: string): Promise<void> {

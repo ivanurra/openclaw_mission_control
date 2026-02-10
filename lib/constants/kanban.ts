@@ -15,7 +15,7 @@ export const PRIORITIES: { id: TaskPriority; label: string; color: string }[] = 
   { id: 'urgent', label: 'Urgent', color: '#ef4444' },
 ];
 
-export const DEVELOPER_COLORS = [
+export const MEMBER_COLORS = [
   '#6366f1', // Indigo
   '#8b5cf6', // Violet
   '#ec4899', // Pink

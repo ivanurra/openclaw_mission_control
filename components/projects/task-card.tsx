@@ -6,17 +6,17 @@ import { GripVertical, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils/cn';
 import { Badge, Avatar } from '@/components/ui';
-import type { Task, Developer } from '@/types';
+import type { Task, Member } from '@/types';
 
 interface TaskCardProps {
   task: Task;
-  developer?: Developer;
+  member?: Member;
   isDragging?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
 }
 
-export function TaskCard({ task, developer, isDragging, onEdit, onDelete }: TaskCardProps) {
+export function TaskCard({ task, member, isDragging, onEdit, onDelete }: TaskCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
   const {
@@ -147,8 +147,8 @@ export function TaskCard({ task, developer, isDragging, onEdit, onDelete }: Task
             {task.priority}
           </Badge>
 
-          {developer && (
-            <Avatar name={developer.name} color={developer.color} size="sm" />
+          {member && (
+            <Avatar name={member.name} color={member.color} size="sm" />
           )}
         </div>
       </div>

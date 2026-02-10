@@ -20,7 +20,6 @@ const navItems = [
 export function Navbar() {
   const pathname = usePathname();
   const showTaskSearch = /^\/projects\/[^/]+/.test(pathname);
-  const aiModel = 'Opus 4.6';
   const gatewayStatus: 'online' | 'disconnected' = 'online';
   const isGatewayOnline = gatewayStatus === 'online';
 
@@ -58,19 +57,6 @@ export function Navbar() {
         <div className="flex-1" />
 
         <div className="hidden md:flex items-center gap-2">
-          <div
-            aria-label={`AI model ${aiModel}`}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold',
-              'border-[var(--border-default)] text-[var(--text-primary)] shadow-sm'
-            )}
-            style={{
-              background: 'linear-gradient(120deg, rgba(56,189,248,0.14), rgba(26,26,26,0.96))',
-            }}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
-            <span className="tracking-[0.06em]">{aiModel}</span>
-          </div>
           <MadridClock />
           <div
             aria-live="polite"

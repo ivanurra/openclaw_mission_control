@@ -39,7 +39,7 @@ interface TaskFrontmatter {
   status: TaskStatus;
   recurring?: boolean;
   priority: string;
-  assignedDeveloperId?: string;
+  assignedMemberId?: string;
   linkedDocumentIds: string[];
   attachments?: TaskAttachment[];
   comments?: TaskComment[];
@@ -47,6 +47,16 @@ interface TaskFrontmatter {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+}
+
+// Backwards compat: migrate old assignedDeveloperId → assignedMemberId
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrateTaskFrontmatter(data: any): TaskFrontmatter {
+  if (data.assignedDeveloperId && !data.assignedMemberId) {
+    data.assignedMemberId = data.assignedDeveloperId;
+    delete data.assignedDeveloperId;
+  }
+  return data as TaskFrontmatter;
 }
 
 export async function getTasks(projectSlug: string): Promise<Task[]> {
@@ -61,16 +71,17 @@ export async function getTasks(projectSlug: string): Promise<Task[]> {
     const result = await readMarkdownFile<TaskFrontmatter>(filePath);
 
     if (result) {
-      const recurring = result.data.recurring ?? result.data.status === 'recurring';
-      const attachments = result.data.attachments ?? [];
-      const comments = result.data.comments ?? [];
+      const data = migrateTaskFrontmatter(result.data);
+      const recurring = data.recurring ?? data.status === 'recurring';
+      const attachments = data.attachments ?? [];
+      const comments = data.comments ?? [];
       tasks.push({
-        ...result.data,
+        ...data,
         recurring,
         attachments,
         comments,
         description: result.content.trim(),
-        priority: result.data.priority as Task['priority'],
+        priority: data.priority as Task['priority'],
       });
     }
   }
@@ -84,16 +95,17 @@ export async function getTask(projectSlug: string, taskId: string): Promise<Task
 
   if (!result) return null;
 
-  const recurring = result.data.recurring ?? result.data.status === 'recurring';
-  const attachments = result.data.attachments ?? [];
-  const comments = result.data.comments ?? [];
+  const data = migrateTaskFrontmatter(result.data);
+  const recurring = data.recurring ?? data.status === 'recurring';
+  const attachments = data.attachments ?? [];
+  const comments = data.comments ?? [];
   return {
-    ...result.data,
+    ...data,
     recurring,
     attachments,
     comments,
     description: result.content.trim(),
-    priority: result.data.priority as Task['priority'],
+    priority: data.priority as Task['priority'],
   };
 }
 
@@ -115,7 +127,7 @@ export async function createTask(projectSlug: string, input: CreateTaskInput): P
     status,
     recurring,
     priority: input.priority || 'medium',
-    assignedDeveloperId: input.assignedDeveloperId,
+    assignedMemberId: input.assignedMemberId,
     linkedDocumentIds: input.linkedDocumentIds || [],
     attachments: input.attachments || [],
     comments: input.comments || [],
@@ -131,7 +143,7 @@ export async function createTask(projectSlug: string, input: CreateTaskInput): P
     status: task.status,
     recurring: task.recurring,
     priority: task.priority,
-    assignedDeveloperId: task.assignedDeveloperId,
+    assignedMemberId: task.assignedMemberId,
     linkedDocumentIds: task.linkedDocumentIds,
     attachments: task.attachments,
     comments: task.comments,
@@ -193,7 +205,7 @@ export async function updateTask(
     status: updatedTask.status,
     recurring: updatedTask.recurring,
     priority: updatedTask.priority,
-    assignedDeveloperId: updatedTask.assignedDeveloperId,
+    assignedMemberId: updatedTask.assignedMemberId,
     linkedDocumentIds: updatedTask.linkedDocumentIds,
     attachments: updatedTask.attachments,
     comments: updatedTask.comments,

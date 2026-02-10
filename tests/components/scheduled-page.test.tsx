@@ -19,6 +19,7 @@ describe('ScheduledPage', () => {
           updatedAt: '2024-01-01T00:00:00Z',
         },
       ],
+      [], // members
     ]);
 
     render(<ScheduledPage />);
@@ -32,12 +33,13 @@ describe('ScheduledPage', () => {
     expect(screen.getByText('Always Running')).toBeInTheDocument();
     expect(screen.getByText('Next Up')).toBeInTheDocument();
     expect(screen.getByText('Automated routines and recurring focus blocks.')).toBeInTheDocument();
-    expect(screen.getByText('endur check')).toBeInTheDocument();
+    expect(screen.getByText('mission control check')).toBeInTheDocument();
   });
 
   it('opens the add recurring task modal and submits', async () => {
     const fetchMock = mockFetchSequence([
-      [],
+      [], // scheduled tasks
+      [], // members
       {
         id: 't-new',
         title: 'Standup',
@@ -77,7 +79,10 @@ describe('ScheduledPage', () => {
   });
 
   it('switches between week and today views', async () => {
-    mockFetchSequence([[]]);
+    mockFetchSequence([
+      [], // scheduled tasks
+      [], // members
+    ]);
     render(<ScheduledPage />);
 
     expect(await screen.findAllByTestId('scheduled-day-card')).toHaveLength(7);
@@ -108,6 +113,7 @@ describe('ScheduledPage', () => {
           updatedAt: '2024-01-01T00:00:00Z',
         },
       ],
+      [], // members
       [
         {
           id: 't2',
@@ -129,7 +135,7 @@ describe('ScheduledPage', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /refresh scheduled data/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect((await screen.findAllByText('Evening Wrap')).length).toBeGreaterThan(0);
     expect(screen.queryAllByText('Morning Brief')).toHaveLength(0);
   });
@@ -148,6 +154,7 @@ describe('ScheduledPage', () => {
           updatedAt: '2024-01-01T00:00:00Z',
         },
       ],
+      [], // members
       {
         id: 't1',
         title: 'Morning Brief Updated',
@@ -203,6 +210,7 @@ describe('ScheduledPage', () => {
           updatedAt: '2024-01-01T00:00:00Z',
         },
       ],
+      [], // members
       { success: true },
     ]);
 

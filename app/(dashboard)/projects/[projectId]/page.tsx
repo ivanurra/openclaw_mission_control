@@ -37,7 +37,7 @@ import { Button, Modal, Input, Textarea, Select, Avatar } from '@/components/ui'
 import type {
   Project,
   Task,
-  Developer,
+  Member,
   TaskStatus,
   CreateTaskInput,
   TaskPriority,
@@ -63,7 +63,7 @@ export default function ProjectKanbanPage({ params }: Props) {
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [developers, setDevelopers] = useState<Developer[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
@@ -96,12 +96,12 @@ export default function ProjectKanbanPage({ params }: Props) {
     status: 'backlog',
     recurring: false,
     priority: 'medium',
-    assignedDeveloperId: undefined,
+    assignedMemberId: undefined,
   });
 
   // Filter states
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all');
-  const [developerFilter, setDeveloperFilter] = useState<string | 'all'>('all');
+  const [memberFilter, setMemberFilter] = useState<string | 'all'>('all');
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -139,7 +139,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       const [projectRes, tasksRes, devsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
         fetch(`/api/projects/${projectId}/tasks`),
-        fetch('/api/developers'),
+        fetch('/api/members'),
       ]);
 
       if (!projectRes.ok) {
@@ -155,7 +155,7 @@ export default function ProjectKanbanPage({ params }: Props) {
 
       setProject(projectData);
       setTasks(tasksData);
-      setDevelopers(devsData);
+      setMembers(devsData);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -168,7 +168,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       .filter((task) => {
         if (task.status !== status) return false;
         if (priorityFilter !== 'all' && task.priority !== priorityFilter) return false;
-        if (developerFilter !== 'all' && task.assignedDeveloperId !== developerFilter) return false;
+        if (memberFilter !== 'all' && task.assignedMemberId !== memberFilter) return false;
         return true;
       })
       .sort((a, b) => a.order - b.order);
@@ -600,10 +600,10 @@ export default function ProjectKanbanPage({ params }: Props) {
 
   const mentionSuggestions = useMemo(() => {
     if (!mentionQuery) return [];
-    return developers
-      .filter((dev) => dev.name.toLowerCase().includes(mentionQuery))
+    return members
+      .filter((m) => m.name.toLowerCase().includes(mentionQuery))
       .slice(0, 5);
-  }, [developers, mentionQuery]);
+  }, [members, mentionQuery]);
 
   function insertMention(name: string) {
     setCommentDraft((prev) => prev.replace(/@([\w\s.-]*)$/, `@${name} `));
@@ -660,7 +660,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       status,
       recurring: status === 'recurring',
       priority: 'medium',
-      assignedDeveloperId: undefined,
+      assignedMemberId: undefined,
     });
     setCommentDraft('');
     setAttachmentError(null);
@@ -677,7 +677,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       status: task.status,
       recurring: task.recurring,
       priority: task.priority,
-      assignedDeveloperId: task.assignedDeveloperId,
+      assignedMemberId: task.assignedMemberId,
     });
     setCommentDraft('');
     setAttachmentError(null);
@@ -695,7 +695,7 @@ export default function ProjectKanbanPage({ params }: Props) {
       status: 'backlog',
       recurring: false,
       priority: 'medium',
-      assignedDeveloperId: undefined,
+      assignedMemberId: undefined,
     });
     setCommentDraft('');
     setAttachmentError(null);
@@ -757,14 +757,14 @@ export default function ProjectKanbanPage({ params }: Props) {
             ))}
           </select>
 
-          {developers.length > 0 && (
+          {members.length > 0 && (
             <select
-              value={developerFilter}
-              onChange={(e) => setDeveloperFilter(e.target.value)}
+              value={memberFilter}
+              onChange={(e) => setMemberFilter(e.target.value)}
               className="px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-default)] text-sm text-[var(--text-secondary)]"
             >
               <option value="all">All Members</option>
-              {developers.map((d) => (
+              {members.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
@@ -851,7 +851,7 @@ export default function ProjectKanbanPage({ params }: Props) {
                       <TaskCard
                         key={task.id}
                         task={task}
-                        developer={developers.find((d) => d.id === task.assignedDeveloperId)}
+                        member={members.find((d) => d.id === task.assignedMemberId)}
                         onEdit={() => openEditTaskModal(task)}
                         onDelete={() => handleDeleteTask(task)}
                       />
@@ -866,7 +866,7 @@ export default function ProjectKanbanPage({ params }: Props) {
             {activeTask && (
               <TaskCard
                 task={activeTask}
-                developer={developers.find((d) => d.id === activeTask.assignedDeveloperId)}
+                member={members.find((d) => d.id === activeTask.assignedMemberId)}
                 isDragging
               />
             )}
@@ -923,11 +923,11 @@ export default function ProjectKanbanPage({ params }: Props) {
 
           <Select
             label="Assigned To"
-            value={taskForm.assignedDeveloperId || ''}
-            onChange={(e) => setTaskForm({ ...taskForm, assignedDeveloperId: e.target.value || undefined })}
+            value={taskForm.assignedMemberId || ''}
+            onChange={(e) => setTaskForm({ ...taskForm, assignedMemberId: e.target.value || undefined })}
             options={[
               { value: '', label: 'Unassigned' },
-              ...developers.map((d) => ({ value: d.id, label: d.name })),
+              ...members.map((d) => ({ value: d.id, label: d.name })),
             ]}
           />
 

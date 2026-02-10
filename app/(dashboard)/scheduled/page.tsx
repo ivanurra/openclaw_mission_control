@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Plus, Zap, CalendarClock, Calendar, Trash2 } from 'lucide-react';
 import { addDays, format, formatDistanceToNowStrict, getDay, startOfDay, startOfWeek } from 'date-fns';
 import { Button, Modal, Input, Textarea, Select, EmptyState } from '@/components/ui';
-import type { CreateScheduledTaskInput, DayOfWeek, ScheduledTask } from '@/types';
+import type { CreateScheduledTaskInput, DayOfWeek, Member, ScheduledTask } from '@/types';
 import { cn } from '@/lib/utils/cn';
 
 const WEEK_DAYS: Array<{ key: DayOfWeek; short: string; label: string }> = [
@@ -32,7 +32,7 @@ const COLOR_OPTIONS = [
 
 const ALWAYS_RUNNING = [
   {
-    title: 'endur check',
+    title: 'mission control check',
     interval: 'Every 30 min',
     color: '#60a5fa',
   },
@@ -64,6 +64,7 @@ function getNextOccurrence(task: ScheduledTask, baseDate: Date): Date {
 
 export default function ScheduledPage() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -80,6 +81,7 @@ export default function ScheduledPage() {
     time: '09:00',
     dayOfWeek: 'monday',
     color: COLOR_OPTIONS[0],
+    assignedMemberId: '',
   });
 
   const currentWeek = useMemo(() => {
@@ -147,7 +149,23 @@ export default function ScheduledPage() {
 
   useEffect(() => {
     fetchTasks();
+    fetchMembers();
   }, [fetchTasks]);
+
+  async function fetchMembers() {
+    try {
+      const res = await fetch('/api/members');
+      const data = await res.json();
+      setMembers(data);
+    } catch (error) {
+      console.error('Failed to fetch members:', error);
+    }
+  }
+
+  const memberOptions = useMemo(() => [
+    { value: '', label: 'Unassigned' },
+    ...members.map((m) => ({ value: m.id, label: m.name })),
+  ], [members]);
 
   function resetForm() {
     setFormData({
@@ -156,6 +174,7 @@ export default function ScheduledPage() {
       time: '09:00',
       dayOfWeek: 'monday',
       color: COLOR_OPTIONS[0],
+      assignedMemberId: '',
     });
   }
 
@@ -173,6 +192,7 @@ export default function ScheduledPage() {
       time: task.time,
       dayOfWeek: task.dayOfWeek,
       color: task.color,
+      assignedMemberId: task.assignedMemberId || '',
     });
     setIsModalOpen(true);
   }
@@ -187,13 +207,18 @@ export default function ScheduledPage() {
     event.preventDefault();
     if (!formData.title.trim()) return;
 
+    const payload = {
+      ...formData,
+      assignedMemberId: formData.assignedMemberId || undefined,
+    };
+
     setIsSaving(true);
     try {
       if (editingTask) {
         const res = await fetch(`/api/scheduled/${editingTask.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error('Failed to update scheduled task');
         const updated = await res.json();
@@ -202,7 +227,7 @@ export default function ScheduledPage() {
         const res = await fetch('/api/scheduled', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error('Failed to create scheduled task');
         const created = await res.json();
@@ -256,6 +281,12 @@ export default function ScheduledPage() {
 
   async function handleRefresh() {
     await fetchTasks();
+  }
+
+  function getAssigneeName(memberId?: string): string | null {
+    if (!memberId) return null;
+    const member = members.find((m) => m.id === memberId);
+    return member?.name || null;
   }
 
   return (
@@ -370,26 +401,32 @@ export default function ScheduledPage() {
                     {dayTasks.length === 0 ? (
                       <div className="text-xs text-[var(--text-muted)]">No tasks</div>
                     ) : (
-                      dayTasks.map((task) => (
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => openEditTaskModal(task)}
-                          aria-label={`Edit scheduled task ${task.title}`}
-                          className="w-full text-left rounded-xl border px-3 py-2 transition-all hover:brightness-110 hover:border-[var(--border-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
-                          style={{
-                            borderColor: `${task.color}55`,
-                            backgroundColor: `${task.color}1a`,
-                          }}
-                        >
-                          <p className="text-sm font-medium truncate" style={{ color: task.color }}>
-                            {task.title}
-                          </p>
-                          <p className="text-xs text-[var(--text-muted)] mt-1">
-                            {format(new Date(`1970-01-01T${task.time}:00`), 'h:mm a')}
-                          </p>
-                        </button>
-                      ))
+                      dayTasks.map((task) => {
+                        const assignee = getAssigneeName(task.assignedMemberId);
+                        return (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => openEditTaskModal(task)}
+                            aria-label={`Edit scheduled task ${task.title}`}
+                            className="w-full text-left rounded-xl border px-3 py-2 transition-all hover:brightness-110 hover:border-[var(--border-strong)] focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                            style={{
+                              borderColor: `${task.color}55`,
+                              backgroundColor: `${task.color}1a`,
+                            }}
+                          >
+                            <p className="text-sm font-medium truncate" style={{ color: task.color }}>
+                              {task.title}
+                            </p>
+                            <p className="text-xs text-[var(--text-muted)] mt-1">
+                              {format(new Date(`1970-01-01T${task.time}:00`), 'h:mm a')}
+                              {assignee && (
+                                <span className="ml-1.5 text-[var(--text-secondary)]">· {assignee}</span>
+                              )}
+                            </p>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -482,6 +519,12 @@ export default function ScheduledPage() {
               options={WEEK_DAYS.map((day) => ({ value: day.key, label: day.label }))}
             />
           </div>
+          <Select
+            label="Assigned To"
+            value={formData.assignedMemberId || ''}
+            onChange={(e) => setFormData({ ...formData, assignedMemberId: e.target.value })}
+            options={memberOptions}
+          />
           <div>
             <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">Color</p>
             <div className="flex flex-wrap gap-2">
