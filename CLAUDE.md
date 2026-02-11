@@ -14,6 +14,12 @@ npm run test:watch # Run Vitest in watch mode
 npm run e2e        # Run Cypress E2E tests (headless, uses .cypress-data)
 npm run e2e:open   # Open Cypress UI for interactive E2E testing
 npm run test:all   # Run unit + E2E tests
+
+# Run a single test file
+npx vitest run tests/components/navbar.test.tsx
+
+# Run tests matching a name pattern
+npx vitest run -t "renders navbar"
 ```
 
 ## Architecture Overview
@@ -25,6 +31,15 @@ Mission Control is a local-first productivity app built with Next.js 16 (App Rou
 3. **People (Crew)** - Team member profiles and management
 4. **Memory** - Read-only bot conversation viewer organized by date
 5. **Scheduled** - Scheduled tasks with date widget, edit/delete modals
+
+### Conventions
+
+- **Path alias**: Use `@/` for imports from project root (e.g., `import { cn } from '@/lib/utils/cn'`).
+- **Data directory**: Defaults to `./data`. Override with `MC_DATA_DIR` env var (used by E2E tests with `.cypress-data`).
+- **Kanban statuses**: `recurring`, `backlog`, `todo`, `in_progress`, `done` (defined in `types/index.ts` and `lib/constants/kanban.ts`).
+- **Task priorities**: `low`, `medium`, `high`, `urgent`.
+- **Markdown files**: Tasks and documents use YAML frontmatter parsed with `gray-matter`. Storage helpers in `lib/storage/file-system.ts` handle read/write.
+- **Memory logs**: Conversation files use `## HH:MM - RoleName` heading format, parsed into structured messages.
 
 ### Data Flow
 
@@ -62,20 +77,6 @@ Browser → fetch()/SWR → /app/api/* routes → /lib/storage/* utilities → /
 ├── documents/index.json + [slug].md   (index.json holds folder tree & doc metadata)
 └── memory/ (not persisted in /data, loaded from external path)
 ```
-
-Tasks and documents use YAML frontmatter in markdown files (parsed with `gray-matter`).
-
-### Key Libraries
-
-- **dnd-kit** - Drag-and-drop for Kanban board
-- **SWR** - Client-side data fetching & caching
-- **gray-matter** - YAML frontmatter parsing
-- **@uiw/react-md-editor** - Markdown editor for Docs
-- **react-markdown + remark-gfm** - Markdown rendering
-- **lucide-react** - Icon library
-- **date-fns** - Date utilities
-- **uuid** - ID generation
-- **turndown** - HTML to Markdown conversion
 
 ### Testing
 
