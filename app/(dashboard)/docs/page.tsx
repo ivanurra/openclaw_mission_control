@@ -168,6 +168,7 @@ export default function DocsPage() {
   );
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Placeholder.configure({

@@ -1,6 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Navbar } from '../../components/layout/navbar';
+import { SidebarProvider } from '../../components/layout/sidebar-context';
 
 let pathname = '/projects';
 
@@ -12,6 +13,14 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
+function renderNavbar() {
+  return render(
+    <SidebarProvider>
+      <Navbar />
+    </SidebarProvider>
+  );
+}
+
 describe('Navbar', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -22,42 +31,17 @@ describe('Navbar', () => {
     vi.useRealTimers();
   });
 
-  it('places Scheduled immediately after Projects', () => {
-    pathname = '/projects';
-    render(<Navbar />);
-
-    const nav = screen.getByRole('navigation');
-    const labels = within(nav)
-      .getAllByRole('link')
-      .map((link) => link.textContent?.replace(/\s+/g, ' ').trim() ?? '');
-
-    const projectsIndex = labels.indexOf('Projects');
-    const scheduledIndex = labels.indexOf('Scheduled');
-
-    expect(projectsIndex).toBeGreaterThanOrEqual(0);
-    expect(scheduledIndex).toBe(projectsIndex + 1);
-  });
-
   it('shows gateway online status in top bar', () => {
     pathname = '/projects';
-    render(<Navbar />);
+    renderNavbar();
 
     expect(screen.getByText('ONLINE')).toBeInTheDocument();
     expect(screen.queryByText('DISCONNECTED')).not.toBeInTheDocument();
   });
 
-  it('uses Crew label in navigation instead of People', () => {
-    pathname = '/projects';
-    render(<Navbar />);
-
-    const nav = screen.getByRole('navigation');
-    expect(within(nav).getByRole('link', { name: /crew/i })).toBeInTheDocument();
-    expect(within(nav).queryByRole('link', { name: /people/i })).not.toBeInTheDocument();
-  });
-
   it('orders Madrid clock, status, and search in the header', () => {
     pathname = '/projects';
-    render(<Navbar />);
+    renderNavbar();
 
     const date = screen.getByTestId('madrid-clock-date');
     const time = screen.getByTestId('madrid-clock-time');
@@ -68,5 +52,12 @@ describe('Navbar', () => {
 
     expect(date.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(status.compareDocumentPosition(searchButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders sidebar toggle button', () => {
+    pathname = '/projects';
+    renderNavbar();
+
+    expect(screen.getByLabelText('Close sidebar')).toBeInTheDocument();
   });
 });

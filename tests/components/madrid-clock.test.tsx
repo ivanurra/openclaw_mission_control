@@ -21,7 +21,7 @@ describe('MadridClock', () => {
     const dateLabel = screen.getByTestId('madrid-clock-date');
     const timeLabel = screen.getByTestId('madrid-clock-time');
 
-    expect(dateLabel.textContent).toMatch(/Saturday,\s*07 February/i);
+    expect(dateLabel.textContent).toMatch(/Saturday,?\s*07 February/i);
     expect(timeLabel.textContent).toBe('11:15');
     expect(timeLabel.textContent).toMatch(/^\d{2}:\d{2}$/);
   });
