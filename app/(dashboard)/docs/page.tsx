@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -33,6 +33,18 @@ type DragEntity =
   | { type: 'folder'; id: string };
 
 export default function DocsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--accent-primary)]" />
+      </div>
+    }>
+      <DocsPageContent />
+    </Suspense>
+  );
+}
+
+function DocsPageContent() {
   const searchParams = useSearchParams();
   const requestedDocId = searchParams.get('doc');
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -244,7 +256,7 @@ export default function DocsPage() {
     }
     isSyncingRef.current = true;
     const html = activeDocument.content ? marked.parse(activeDocument.content) : '';
-    editor.commands.setContent(html, false);
+    editor.commands.setContent(html, { emitUpdate: false });
     isSyncingRef.current = false;
   }, [editor, activeDocument?.id]);
 
@@ -325,10 +337,11 @@ export default function DocsPage() {
       if (importedDocuments.length > 0) {
         setDocuments((prev) => [...[...importedDocuments].reverse(), ...prev]);
         const openedDocument = importedDocuments[importedDocuments.length - 1];
-        if (openedDocument.folderId) {
+        const folderId = openedDocument.folderId;
+        if (folderId) {
           setExpandedFolders((prev) => {
             const next = new Set(prev);
-            next.add(openedDocument.folderId);
+            next.add(folderId);
             return next;
           });
         }
@@ -560,8 +573,9 @@ export default function DocsPage() {
           setSelectedFolderId(updatedDoc.folderId);
           setActiveDocument((prev) => (prev && prev.id === updatedDoc.id ? updatedDoc : prev));
         }
-        if (updatedDoc.folderId) {
-          setExpandedFolders((prev) => new Set(prev).add(updatedDoc.folderId));
+        const docFolderId = updatedDoc.folderId;
+        if (docFolderId) {
+          setExpandedFolders((prev) => new Set(prev).add(docFolderId));
         }
         showNotice('success', `Moved "${updatedDoc.title}" successfully.`);
         return;
@@ -589,8 +603,9 @@ export default function DocsPage() {
 
       const updatedFolder: FolderType = await res.json();
       setFolders((prev) => prev.map((folder) => (folder.id === updatedFolder.id ? updatedFolder : folder)));
-      if (updatedFolder.parentId) {
-        setExpandedFolders((prev) => new Set(prev).add(updatedFolder.parentId));
+      const parentId = updatedFolder.parentId;
+      if (parentId) {
+        setExpandedFolders((prev) => new Set(prev).add(parentId));
       }
       showNotice('success', `Moved folder "${updatedFolder.name}" successfully.`);
     } catch (error) {

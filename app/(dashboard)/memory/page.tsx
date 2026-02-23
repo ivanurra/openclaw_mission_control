@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { MessageSquare, Search, Star, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { EmptyState } from '@/components/ui';
@@ -9,6 +9,18 @@ import { cn } from '@/lib/utils/cn';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isToday, getDay, addMonths, subMonths } from 'date-fns';
 
 export default function MemoryPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--accent-primary)]" />
+      </div>
+    }>
+      <MemoryPageContent />
+    </Suspense>
+  );
+}
+
+function MemoryPageContent() {
   const searchParams = useSearchParams();
   const queryDate = searchParams.get('date');
   const [availableDates, setAvailableDates] = useState<string[]>([]);

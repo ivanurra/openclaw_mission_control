@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -31,6 +31,18 @@ const STATUS_COLORS: Record<string, { dot: string; text: string }> = {
 type ModalTab = 'settings' | 'soul' | 'memory';
 
 export default function PeoplePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--accent-primary)]" />
+      </div>
+    }>
+      <PeoplePageContent />
+    </Suspense>
+  );
+}
+
+function PeoplePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const hasHandledQuery = useRef(false);

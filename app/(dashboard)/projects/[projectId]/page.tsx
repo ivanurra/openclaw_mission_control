@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use, useMemo, useRef } from 'react';
+import { useState, useEffect, use, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   DndContext,
@@ -57,6 +57,18 @@ interface Props {
 
 export default function ProjectKanbanPage({ params }: Props) {
   const { projectId } = use(params);
+  return (
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--accent-primary)]" />
+      </div>
+    }>
+      <ProjectKanbanContent projectId={projectId} />
+    </Suspense>
+  );
+}
+
+function ProjectKanbanContent({ projectId }: { projectId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const taskIdFromQuery = searchParams.get('task');
